@@ -13,40 +13,77 @@ jobs:
         include:
           - triple: 'x86_64-linux-gnu'
             target: 'linux'
+            os: 'ubuntu-22.04'
+            native: false
 
           - triple: 'aarch64-linux-gnu'
             target: 'linux'
+            os: 'ubuntu-22.04'
+            native: false
 
           - triple: 'x86_64-windows-msvc'
             target: 'windows'
+            os: 'ubuntu-22.04'
+            native: false
 
+          - triple: 'aarch64-windows-msvc'
+            target: 'windows'
+            os: 'ubuntu-22.04'
+            native: false
+
+          # macOS targets are built natively on macOS runners. Cross-linking
+          # them from Linux with lld + an old SDK produces a Mach-O whose
+          # __DATA_CONST segment lacks the SG_READ_ONLY flag, which the dyld on
+          # recent macOS rejects at launch ("__DATA_CONST segment missing
+          # SG_READ_ONLY flag"). See issue #103. Building with the system
+          # toolchain (ld64) emits a correct, launchable binary.
           - triple: 'x86_64-apple-darwin'
             target: 'macos'
+            os: 'macos-13'
+            native: true
 
           - triple: 'arm64-apple-macos'
             target: 'macos'
+            os: 'macos-14'
+            native: true
 
     name: Build CLI for ${{ matrix.triple }}
 
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
 
       - name: Update APT repos
+        if: ${{ !matrix.native }}
         run: sudo apt-get update
 
-      - name: Set-up D compiler
+      # Cross-compilation path (Linux and Windows targets, built from Ubuntu).
+      - name: Set-up D compiler (cross)
+        if: ${{ !matrix.native }}
         uses: ./.github/actions/setup-d-compiler
         with:
           target-triple: ${{ matrix.triple }}
 
+      # Native path (macOS targets, built on macOS runners with the system
+      # linker so the resulting binary launches on modern macOS).
+      - name: Set-up D compiler (native)
+        if: ${{ matrix.native }}
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ldc-1.41.0
+
       - name: Write version file
         uses: ./.github/actions/write-version-file
 
-      - name: Build
+      - name: Build (cross)
+        if: ${{ !matrix.native }}
         run: dub build -b release-debug --compiler=ldc2 --arch ${{ matrix.triple }} :cli-frontend
+
+      - name: Build (native)
+        if: ${{ matrix.native }}
+        run: dub build -b release-debug --compiler=ldc2 :cli-frontend
 
       - name: Move files around for artifcation
         uses: ./.github/actions/rename-files

@@ -11,7 +11,10 @@
     "buildRequirements": ["allowWarnings", "requireBoundsCheck"],
 
     "dependencies": {
-        "botan": "~>1.13",
+        "botan": {
+            "repository": "git+https://github.com/Dadoum/botan.git",
+            "version": "06a8ecdf7e69a6753141c5b248d6a24597978469"
+        },
         "dynamic-loader": {
             "repository": "git+https://github.com/Dadoum/dynamicloader.git",
             "version": "9202b389affa6be0740e7295dea8f0146537a784"
@@ -23,15 +26,20 @@
         },
         "provision": {
             "repository": "git+https://github.com/Dadoum/Provision.git",
-            "version": "645d56d8e8c86c057893321843db00b21f1aaeb2"
+            "version": "7717ce1f7b3c9779fe9982005d07b6665071a239"
         },
         "requests": "~>2.1",
         "slf4d": "~>2"
     },
 
     "subConfigurations": {
+        "botan": "pubkey",
         "provision": "libplist"
     },
+
+    "versions": [
+        "AEAD_GCM", "CTR_BE", "X931_RNG", "PBKDF2", "PBKDF1", "HMAC_DRBG"
+    ],
 
     "subPackages": [
         "frontends/cli",
