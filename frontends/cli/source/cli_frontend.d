@@ -220,8 +220,49 @@ struct VersionCommand {
     }
 }
 
+/**
+ * On Apple Silicon, the iOS-tooling libraries (libimobiledevice, libusbmuxd, libplist)
+ * are installed by Homebrew under /opt/homebrew/lib, which is NOT part of dyld's default
+ * fallback search path (unlike /usr/local/lib on Intel). Since we dlopen() them by their
+ * bare so-name, the process would fail to find them unless the user manually exported
+ * DYLD_FALLBACK_LIBRARY_PATH. We transparently re-exec ourselves once with the Homebrew
+ * prefixes injected so the CLI "just works". Returns the child exit code, or -1 when no
+ * re-exec is needed (already shimmed, or not on macOS).
+ */
+int reExecWithHomebrewLibs()
+{
+    version (OSX) {
+        if (environment.get("SIDELOADER_DYLD_SHIM") !is null)
+            return -1;
+
+        import core.runtime : Runtime;
+
+        string[] searchPaths = ["/opt/homebrew/lib", "/usr/local/lib"];
+        string existing = environment.get("DYLD_FALLBACK_LIBRARY_PATH", "");
+        if (existing.length)
+            searchPaths ~= existing;
+        string home = environment.get("HOME", "");
+        if (home.length)
+            searchPaths ~= home ~ "/lib";
+        searchPaths ~= "/usr/lib";
+
+        string[string] childEnv = environment.toAA();
+        childEnv["SIDELOADER_DYLD_SHIM"] = "1";
+        childEnv["DYLD_FALLBACK_LIBRARY_PATH"] = searchPaths.join(":");
+
+        string[] childArgs = file.thisExePath() ~ Runtime.args[1 .. $];
+        return wait(spawnProcess(childArgs, childEnv));
+    } else {
+        return -1;
+    }
+}
+
 int entryPoint(Commands commands)
 {
+    int shimExitCode = reExecWithHomebrewLibs();
+    if (shimExitCode != -1)
+        return shimExitCode;
+
     version (linux) {
         import core.stdc.locale;
         setlocale(LC_ALL, "");
