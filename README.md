@@ -2,6 +2,9 @@
 
 *The missing open-source iOS sideloader.*
 
+> **Note:** This is a maintained fork, originally forked from [Dadoum/Sideloader](https://github.com/Dadoum/Sideloader).
+> It aims to keep the project up to date and improve it. All original work and credit go to [Dadoum](https://github.com/Dadoum) and the upstream contributors.
+
 Sideloader is an application made to install third-party applications on iOS devices.
 
 You can see it as an open-source replacement of _Cydia Impactor_.
