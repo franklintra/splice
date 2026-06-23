@@ -1,0 +1,19 @@
+frontends/cli/source/cli_frontend.d
+  s_8411d8652469bb::t_df77a380c9b3bd 223-259,262-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "f2f2b6a3e58a15f5ba9bcfdd36cb84c4ac3f58d0",
+  "prompts": {},
+  "sessions": {
+    "s_8411d8652469bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a3eda227-ebec-4aa2-9df9-a5dc313b469e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
