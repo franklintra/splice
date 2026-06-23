@@ -38,7 +38,8 @@
     },
 
     "versions": [
-        "AEAD_GCM", "CTR_BE", "X931_RNG", "PBKDF2", "PBKDF1", "HMAC_DRBG"
+        "AEAD_GCM", "CTR_BE", "X931_RNG", "PBKDF2", "PBKDF1", "HMAC_DRBG",
+        "DisableDebugger"
     ],
 
     "subPackages": [

@@ -113,6 +113,18 @@ see [this link](https://slproweb.com/products/Win32OpenSSL.html))
 
 ## How do I build it myself?
 
+> [!IMPORTANT]
+> **Supported toolchain: LDC 1.41.0.** The CLI and core library are built and
+> tested against LDC 1.41.0, which is what CI pins (see `.github/workflows/`).
+> LDC 1.42.x currently triggers an internal compiler error (ICE — the codegen
+> backend segfaults, exit code -11) while compiling this project, so do not use
+> it. If you installed LDC from Homebrew and it is 1.42.x, fetch 1.41.0 from the
+> [LDC releases page](https://github.com/ldc-developers/ldc/releases/tag/v1.41.0)
+> and pass it explicitly, e.g.
+> `dub build :cli-frontend --compiler=/path/to/ldc2-1.41.0/bin/ldc2`.
+> GDC won't compile this code (the cryptography library uses SIMD instructions
+> GDC can't emit yet).
+
 ### OpenSUSE Tumbleweed:
 
 1. Install the dependencies:
@@ -132,10 +144,13 @@ see [this link](https://slproweb.com/products/Win32OpenSSL.html))
 
 ### Other distributions:
 
-Get a recent version `ldc2` or `dmd` installed (an installation script is available on 
-[dlang.org](https://dlang.org/)). It is tested with D 2.104.2 (= LDC 1.34) but it will probably compile with
-older compilers. GNU D compiler won't compile that code though (the cryptography library makes 
-use of SIMD instructions that cannot be compiled by GDC yet).
+Install LDC 1.41.0 (an installation script is available on
+[dlang.org](https://dlang.org/), or grab it from the
+[LDC releases page](https://github.com/ldc-developers/ldc/releases/tag/v1.41.0)).
+This is the pinned, supported compiler — see the note above; LDC 1.42.x currently
+ICEs on this project. GNU D compiler won't compile that code either (the
+cryptography library makes use of SIMD instructions that cannot be compiled by
+GDC yet).
 
 ## How it works?
 
