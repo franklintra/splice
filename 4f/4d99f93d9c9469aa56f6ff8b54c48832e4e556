@@ -1,0 +1,49 @@
+.github/workflows/build-qt.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 248
+dub.json
+  s_8411d8652469bb::t_363f3c3ee3621a 14-17,29,36,40-42
+frontends/cli/dub.selections.json
+  s_8411d8652469bb::t_363f3c3ee3621a 6,11,13,27,30,35-36,42
+frontends/dlangui/dub.selections.json
+  s_8411d8652469bb::t_363f3c3ee3621a 6-12,14,18,27-28,31,36-37,43
+.github/actions/setup-d-compiler/action.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 14
+.github/workflows/build-cli.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 16-17,21-22,26-27,29-39,42-43,47-48,52,59,62-64,69-76,80-81,84-86
+frontends/cli/source/cli_frontend.d
+  s_8411d8652469bb::t_363f3c3ee3621a 223-259,262-265
+.github/actions/target-aarch64-linux-gnu/action.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 12
+.github/actions/target-aarch64-windows-msvc/action.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 1-34
+.github/actions/target-x86_64-apple-darwin/action.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 12
+frontends/gtk/dub.selections.json
+  s_8411d8652469bb::t_363f3c3ee3621a 4-5,7-11,14-20,22,24-26,28-29,31-32,34-38,41-45
+dub.selections.json
+  s_8411d8652469bb::t_363f3c3ee3621a 6,11,13,27,30,35-36,41
+frontends/qt/dub.selections.json
+  s_8411d8652469bb::t_363f3c3ee3621a 6,11,13,27,30,35-36,42
+.github/actions/target-arm64-apple-macos/action.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 12
+.github/actions/target-x86_64-windows-msvc/action.yml
+  s_8411d8652469bb::t_363f3c3ee3621a 1,12
+frontends/swiftui/dub.selections.json
+  s_8411d8652469bb::t_363f3c3ee3621a 6,11,13,27,30,35-36,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "4f4d99f93d9c9469aa56f6ff8b54c48832e4e556",
+  "prompts": {},
+  "sessions": {
+    "s_8411d8652469bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a3eda227-ebec-4aa2-9df9-a5dc313b469e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
