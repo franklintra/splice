@@ -1,0 +1,22 @@
+dub.json
+  s_2eea0ee1da1f20::t_0608eacc96d35e 41-42
+README.md
+  s_2eea0ee1da1f20::t_14011b6ea9c774 147-153
+  s_2eea0ee1da1f20::t_8f8512eb91b70d 116-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "b6dc5e3221be68a857944616ee16fc0910ba4075",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
