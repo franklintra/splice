@@ -1,0 +1,19 @@
+.github/workflows/build-cli.yml
+  s_b5998a6aaacaae::t_bcd031e04089eb 16-17,21-22,26-27,31-39,42-43,47-48,52,59,62-64,69-76,80-81,84-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "6ab6bb750ec90fb6fe5391c09b8665b9c96cb337",
+  "prompts": {},
+  "sessions": {
+    "s_b5998a6aaacaae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cae21957-e5dd-4662-99e5-4767f2821ff1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
