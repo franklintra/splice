@@ -28,9 +28,22 @@ import std.process : environment;
 import std.stdio;
 import std.string : leftJustify;
 
-import core.sys.posix.unistd : isatty;
-
 import jsonout : g_jsonOutput;
+
+// Cross-platform "is stdout a terminal?". POSIX uses isatty(STDOUT_FILENO);
+// Windows has no posix.unistd, so go through the CRT's _isatty/_fileno.
+version (Windows)
+{
+    import core.stdc.stdio : FILE, stdout;
+    private extern(C) int _isatty(int fd) @nogc nothrow;
+    private extern(C) int _fileno(FILE* stream) @nogc nothrow;
+    private bool stdoutIsTty() { return _isatty(_fileno(stdout)) != 0; }
+}
+else
+{
+    import core.sys.posix.unistd : isatty;
+    private bool stdoutIsTty() { return isatty(1) != 0; }
+}
 
 // ---------------------------------------------------------------------------
 // Theme
@@ -70,7 +83,7 @@ void initColor(bool userDisabled)
         g_color = false;
         return;
     }
-    g_color = isatty(1) != 0;
+    g_color = stdoutIsTty();
 }
 
 /// Force colour on/off (tests, demos, an explicit `--color`). Honors `--json`.

@@ -92,6 +92,37 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: sideloader-cli-${{ matrix.triple }}
+          name: splice-cli-${{ matrix.triple }}
           path: |
             ${{github.workspace}}/bin/*
+
+  # Combine the two native macOS slices into a single universal (fat) binary so
+  # users get one download that runs on both Intel and Apple Silicon.
+  macos-universal:
+    name: Build macOS universal CLI
+    needs: build
+    runs-on: macos-14
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: splice-cli-x86_64-apple-darwin
+          path: x64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: splice-cli-arm64-apple-macos
+          path: arm64
+
+      - name: Create universal binary with lipo
+        run: |
+          mkdir -p bin
+          lipo -create -output bin/splice-cli-macos-universal \
+            x64/splice-cli-x86_64-apple-darwin \
+            arm64/splice-cli-arm64-apple-macos
+          chmod +x bin/splice-cli-macos-universal
+          lipo -info bin/splice-cli-macos-universal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splice-cli-macos-universal
+          path: ${{github.workspace}}/bin/splice-cli-macos-universal

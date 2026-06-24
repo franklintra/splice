@@ -5,7 +5,7 @@ inputs:
   version-text:
     description: Version text
     required: false
-    default: 'Sideloader automated build, branch ${{ github.ref_name }}, commit ${{ github.sha }}'
+    default: 'Splice automated build, branch ${{ github.ref_name }}, commit ${{ github.sha }}'
 
 runs:
   using: composite
