@@ -1,0 +1,30 @@
+source/app/persistence.d
+  s_2eea0ee1da1f20::t_f2fe02c79913d1 1-470
+source/sideload/application.d
+  s_2eea0ee1da1f20::t_cfa95b35b6e399 22-25,28
+source/sideload/certificateidentity.d
+  s_2eea0ee1da1f20::t_e485f75f3ee37d 118-121,132-146
+  s_2eea0ee1da1f20::t_4e640d42df04ed 122-131
+  s_2eea0ee1da1f20::t_7cb4b72ed01052 54-57,62-79,91
+source/sideload/package.d
+  s_2eea0ee1da1f20::t_bef967dd84f3be 258,261,263,270,278
+  s_2eea0ee1da1f20::t_adba5d8dd98eba 248
+  s_2eea0ee1da1f20::t_2bb02f31537a07 246,249
+  s_2eea0ee1da1f20::t_d27679d8aa4d99 241-245,247,250-257,259-260,262,264-269,271-277,279-282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "012d3c1e40235eaf9e4db25329ec7465d73a223c",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
