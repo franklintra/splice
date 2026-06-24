@@ -37,36 +37,15 @@ struct SideStoreCommand
 
 /**
  * Resolves the UDID to act on, honouring an explicit `--udid` and otherwise
- * picking the sole connected device. Logs a clear message and leaves `udid`
- * empty (caller should `return 1`) when there is no device or the choice is
- * ambiguous. Never throws on the "no device" path.
+ * picking the sole connected device (deduping a device reachable both over USB
+ * and Wi-Fi into one). Logs clear guidance and returns null (caller should
+ * `return 1`) when there is no device or the choice is ambiguous. Never throws
+ * on the "no device" path. SideStore pairing wants a cabled connection, so this
+ * keeps the default (USB-preferred) transport.
  */
 private string resolveDeviceUdid(string explicitUdid)
 {
-    auto log = getLogger();
-
-    if (explicitUdid.length)
-        return explicitUdid;
-
-    iDeviceInfo[] deviceList;
-    try {
-        deviceList = iDevice.deviceList();
-    } catch (Exception ex) {
-        log.errorF!"Could not enumerate connected devices: %s"(ex.msg);
-        log.error("Please connect a device over USB and make sure usbmuxd is running.");
-        return null;
-    }
-
-    if (deviceList.length == 0) {
-        log.error("No device connected. Please connect your iPhone/iPad over USB and unlock it.");
-        return null;
-    }
-    if (deviceList.length > 1) {
-        log.error("Multiple devices are connected. Please select one with --udid.");
-        return null;
-    }
-
-    return deviceList[0].udid;
+    return selectConnectedUdid(explicitUdid);
 }
 
 @(Command("status").Description("Report whether SideStore is installed on the device."))

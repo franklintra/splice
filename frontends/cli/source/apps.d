@@ -32,37 +32,6 @@ import sideload.refresh;
 import cli_frontend;
 
 // ---------------------------------------------------------------------------
-// Shared device-selection helper (mirrors install.d's --udid logic).
-// ---------------------------------------------------------------------------
-
-/**
- * Resolves which connected device to act on.
- *
- * Returns the requested UDID, or the only connected device's UDID, or null when
- * no device is connected or several are connected and none was requested (an
- * error is logged in those cases). Mirrors the selection logic in `install.d`.
- */
-private string selectDeviceUdid(string requestedUdid)
-{
-    auto log = getLogger();
-    auto devices = iDevice.deviceList();
-
-    if (requestedUdid.length)
-        return requestedUdid;
-
-    if (devices.length == 1)
-        return devices[0].udid;
-
-    if (!devices.length) {
-        log.error("No device connected.");
-        return null;
-    }
-
-    log.error("Multiple devices are connected. Please select one with --udid.");
-    return null;
-}
-
-// ---------------------------------------------------------------------------
 // Expiry countdown formatting (PURE, unit-tested).
 // ---------------------------------------------------------------------------
 
@@ -160,6 +129,9 @@ struct RefreshCommand
     @(NamedArgument("udid").Description("UDID of the device (if multiple are available)."))
     string udid = null;
 
+    @(NamedArgument("wifi", "prefer-network").Description("Prefer connecting over Wi-Fi when the device is reachable both over USB and Wi-Fi (requires a prior USB pairing with Wi-Fi sync enabled)."))
+    bool wifi = false;
+
     int opCall()
     {
         auto log = getLogger();
@@ -175,12 +147,10 @@ struct RefreshCommand
             return 1;
         string configurationPath = session.configurationPath;
 
-        string chosenUdid = selectDeviceUdid(udid);
-        if (!chosenUdid)
+        string chosenUdid, transportLabel;
+        auto device = selectConnectedDevice(udid, wifi, chosenUdid, transportLabel);
+        if (!device)
             return 1;
-
-        log.infoF!"Initiating connection to the device (UDID: %s)"(chosenUdid);
-        auto device = new iDevice(chosenUdid);
 
         auto registry = loadInstalledRegistry(configurationPath);
         auto now = Clock.currTime();
@@ -302,13 +272,13 @@ struct ListCommand
 
         auto log = getLogger();
         try {
-            string chosenUdid = selectDeviceUdid(udid);
-            if (!chosenUdid) {
+            string chosenUdid, transportLabel;
+            auto device = selectConnectedDevice(udid, false, chosenUdid, transportLabel);
+            if (!device) {
                 log.warn("Skipping device verification: no device selected.");
                 return false;
             }
 
-            auto device = new iDevice(chosenUdid);
             scope lockdown = new LockdowndClient(device, "sideloader.list");
             scope service = lockdown.startService("com.apple.mobile.installation_proxy");
             scope client = new InstallationProxyClient(device, service);
@@ -365,12 +335,10 @@ struct UninstallCommand
             ? bundleId ~ "." ~ record.teamId
             : bundleId;
 
-        string chosenUdid = selectDeviceUdid(udid);
-        if (!chosenUdid)
+        string chosenUdid, transportLabel;
+        auto device = selectConnectedDevice(udid, false, chosenUdid, transportLabel);
+        if (!device)
             return 1;
-
-        log.infoF!"Initiating connection to the device (UDID: %s)"(chosenUdid);
-        auto device = new iDevice(chosenUdid);
 
         try {
             scope lockdown = new LockdowndClient(device, "sideloader.uninstall");

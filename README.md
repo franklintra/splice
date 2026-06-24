@@ -111,6 +111,33 @@ see [this link](https://slproweb.com/products/Win32OpenSSL.html))
 9. Open the SideStore app and sign in with the same Apple ID that you used to install SideStore in step 3.
 10. Go to the Apps tab and refresh the SideStore app by tapping on the green day counter or selecting Refresh All. You must do this whenever you install SideStore, otherwise you may encounter errors like SideStore expiring earlier than it should.
 
+## Wireless install/refresh over Wi-Fi
+
+Once a device has been paired over USB at least once (and "Sync over Wi-Fi" is
+enabled — the same SideStore-style trust that lets Finder/iTunes see the device
+without a cable), Sideloader can install, refresh and run its daemon over Wi-Fi
+on the same network — no cable required.
+
+* `sideloader install App.ipa`, `sideloader refresh`, `sideloader uninstall …`
+  and `sideloader tool …` automatically discover devices that are reachable over
+  Wi-Fi as well as USB. A device that is reachable both ways is treated as a
+  single device (so the daemon never refreshes it twice), and each command logs
+  the transport it is using (e.g. `Connecting to <udid> over Wi-Fi`).
+* When a device is reachable over **both** USB and Wi-Fi, Sideloader prefers the
+  cabled connection (it is more reliable). Pass `--wifi` (alias
+  `--prefer-network`) to `install`, `refresh` or `daemon` to force the Wi-Fi
+  transport instead.
+* A device that is **only** reachable over Wi-Fi is selected automatically; you
+  do not need `--wifi` for it.
+* The background daemon (`sideloader daemon`) enumerates and refreshes both USB
+  and Wi-Fi devices, so apps keep getting re-signed while your phone is just on
+  the same Wi-Fi network, with no cable plugged in.
+
+To enable Wi-Fi sync, connect the device once over USB, trust the computer, then
+turn on "Show this iPhone when on Wi-Fi" (Finder on macOS) / "Sync with this
+iPhone over Wi-Fi" (iTunes on Windows). After that first pairing, the cable is
+no longer needed for the commands above.
+
 ## How do I build it myself?
 
 > [!IMPORTANT]

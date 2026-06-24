@@ -337,6 +337,103 @@ DeveloperTeam selectTeamInteractive(SideloaderSession session, string teamId)
     return team;
 }
 
+/**
+ * Shared connected-device selection for the CLI (issue #13).
+ *
+ * Enumerates `iDevice.deviceList()`, DEDUPS a device that appears on both USB
+ * and the network into one logical entry, then selects the one to act on
+ * honouring an explicit `--udid` and a `--wifi`/`--prefer-network` opt-in.
+ *
+ * On success returns the connected `iDevice` (opened with the chosen transport
+ * preference) and fills `chosenUdid`/`transportLabel`, logging which transport
+ * the command is using (e.g. "Connecting to <udid> over Wi-Fi"). On "no device"
+ * or "ambiguous" it logs the appropriate guidance and returns `null` (the caller
+ * should `return 1`). Never throws on the no-device path.
+ *
+ * `preferNetwork` mirrors a command's `--wifi`/`--prefer-network` flag.
+ */
+iDevice selectConnectedDevice(string requestedUdid, bool preferNetwork,
+        out string chosenUdid, out string transportLabel)
+{
+    auto log = getLogger();
+
+    iDeviceInfo[] rawList;
+    try {
+        rawList = iDevice.deviceList();
+    } catch (Exception ex) {
+        log.errorF!"Could not enumerate connected devices: %s"(ex.msg);
+        return null;
+    }
+
+    auto devices = dedupDevices(rawList);
+    auto preference = preferNetwork
+        ? TransportPreference.preferNetwork
+        : TransportPreference.preferUsb;
+    auto selection = selectDevice(devices, requestedUdid, preference);
+
+    final switch (selection.status) {
+        case DeviceSelectionStatus.noDevice:
+            if (requestedUdid.length)
+                log.errorF!"No connected device matches UDID `%s` (over USB or Wi-Fi)."(requestedUdid);
+            else
+                log.error("No device connected (neither over USB nor Wi-Fi).");
+            return null;
+        case DeviceSelectionStatus.ambiguous:
+            log.error("Multiple devices are connected. Please select one with --udid.");
+            return null;
+        case DeviceSelectionStatus.selected:
+            break;
+    }
+
+    chosenUdid = selection.device.udid;
+    transportLabel = selection.device.transportLabel;
+
+    string transportWord = selection.connType == iDeviceConnectionType.network ? "Wi-Fi" : "USB";
+    log.infoF!"Connecting to %s over %s (reachable via %s)."(
+        chosenUdid, transportWord, transportLabel);
+
+    bool useNetwork = selection.connType == iDeviceConnectionType.network;
+    return new iDevice(chosenUdid,
+        useNetwork ? TransportPreference.preferNetwork : TransportPreference.preferUsb);
+}
+
+/**
+ * Convenience for commands that only need the resolved UDID (and don't open the
+ * device through `selectConnectedDevice`). Same dedup/selection/logging as
+ * above, returning the chosen udid or `null` (with guidance logged).
+ */
+string selectConnectedUdid(string requestedUdid, bool preferNetwork = false)
+{
+    auto log = getLogger();
+
+    iDeviceInfo[] rawList;
+    try {
+        rawList = iDevice.deviceList();
+    } catch (Exception ex) {
+        log.errorF!"Could not enumerate connected devices: %s"(ex.msg);
+        return null;
+    }
+
+    auto preference = preferNetwork
+        ? TransportPreference.preferNetwork
+        : TransportPreference.preferUsb;
+    auto selection = selectDevice(dedupDevices(rawList), requestedUdid, preference);
+
+    final switch (selection.status) {
+        case DeviceSelectionStatus.noDevice:
+            if (requestedUdid.length)
+                log.errorF!"No connected device matches UDID `%s` (over USB or Wi-Fi)."(requestedUdid);
+            else
+                log.error("No device connected (neither over USB nor Wi-Fi).");
+            return null;
+        case DeviceSelectionStatus.ambiguous:
+            log.error("Multiple devices are connected. Please select one with --udid.");
+            return null;
+        case DeviceSelectionStatus.selected:
+            return selection.device.udid;
+    }
+}
+
 // planned commands
 
 import account;

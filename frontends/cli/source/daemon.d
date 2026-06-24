@@ -35,6 +35,9 @@ struct DaemonCommand
     @(NamedArgument("no-notify").Description("Suppress native desktop notifications about refresh outcomes."))
     bool noNotify = false;
 
+    @(NamedArgument("wifi", "prefer-network").Description("Prefer connecting over Wi-Fi when a device is reachable both over USB and Wi-Fi (requires a prior USB pairing with Wi-Fi sync enabled)."))
+    bool wifi = false;
+
     int opCall()
     {
         auto log = getLogger();
@@ -68,25 +71,35 @@ struct DaemonCommand
     {
         auto log = getLogger();
 
-        // USB device discovery is sufficient for #9.
-        // TODO(#13): Wi-Fi / usbmuxd-network device discovery would be merged in
-        // here (e.g. by also enumerating IDEVICE_LOOKUP_NETWORK devices) so the
-        // daemon can refresh devices that are only reachable over the network.
-        auto deviceInfos = iDevice.deviceList();
+        // Issue #13: `deviceList()` already returns BOTH USB and network (Wi-Fi)
+        // devices, but a device reachable both ways appears twice (same udid, two
+        // connTypes). Dedup so we connect to — and refresh — each device exactly
+        // once. `--wifi` biases the connection to Wi-Fi when both are available.
+        auto preference = wifi
+            ? TransportPreference.preferNetwork
+            : TransportPreference.preferUsb;
+        auto entries = dedupDevices(iDevice.deviceList());
 
         iDevice[] devices;
-        foreach (info; deviceInfos) {
+        foreach (entry; entries) {
+            bool useNetwork = wifi
+                ? entry.overNetwork
+                : !entry.overUsb && entry.overNetwork;
+            string transportWord = useNetwork ? "Wi-Fi" : "USB";
             try {
-                devices ~= new iDevice(info.udid);
+                devices ~= new iDevice(entry.udid, preference);
+                log.infoF!"Device %s reachable via %s; refreshing over %s."(
+                    entry.udid, entry.transportLabel, transportWord);
             } catch (Exception e) {
-                log.warnF!"Could not connect to device %s: %s"(info.udid, e.msg);
+                log.warnF!"Could not connect to device %s (%s): %s"(
+                    entry.udid, entry.transportLabel, e.msg);
             }
         }
 
         if (devices.length == 0) {
-            log.info("No device connected; nothing to refresh this pass.");
+            log.info("No device connected over USB or Wi-Fi; nothing to refresh this pass.");
         } else {
-            log.infoF!"%d device(s) connected."(devices.length);
+            log.infoF!"%d device(s) connected (USB and/or Wi-Fi)."(devices.length);
         }
 
         auto now = Clock.currTime();

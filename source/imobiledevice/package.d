@@ -73,6 +73,250 @@ struct iDeviceInfo {
     iDeviceConnectionType connType;
 }
 
+/**
+ * A device collapsed across transports.
+ *
+ * `iDevice.deviceList()` (via `idevice_get_device_list_extended`) returns ONE
+ * `iDeviceInfo` per (udid, connection-type) pair, so a device that is reachable
+ * both over USB and over the network (Wi-Fi sync, issue #13) appears TWICE with
+ * the same `udid`. `dedupDevices` folds those into a single logical
+ * `iDeviceEntry` that remembers which transports the device is reachable on, so
+ * callers see one device and don't double-act on it.
+ */
+struct iDeviceEntry {
+    string udid;
+    bool overUsb;     /// reachable via usbmuxd (USB)
+    bool overNetwork; /// reachable via the network (Wi-Fi)
+
+    /// Whether the device is reachable over the network at all.
+    bool reachableOverNetwork() const => overNetwork;
+
+    /// A short, user-facing transport label: "USB", "Wi-Fi" or "USB+Wi-Fi".
+    string transportLabel() const {
+        if (overUsb && overNetwork)
+            return "USB+Wi-Fi";
+        if (overNetwork)
+            return "Wi-Fi";
+        return "USB";
+    }
+}
+
+/**
+ * How a command would like to pick a transport when a device is reachable both
+ * over USB and over the network.
+ *
+ * The default is `preferUsb` because a cabled connection is more reliable; a
+ * command can opt into `preferNetwork` (e.g. via a `--wifi` flag) to target the
+ * Wi-Fi transport when both are available.
+ */
+enum TransportPreference {
+    preferUsb,
+    preferNetwork,
+}
+
+/**
+ * Folds a raw `iDeviceInfo[]` (which lists a device once per transport) into one
+ * `iDeviceEntry` per udid, recording whether each device is reachable over USB
+ * and/or the network. Order is preserved by first appearance. PURE — no device
+ * access — so it is unit-testable with synthetic lists.
+ */
+iDeviceEntry[] dedupDevices(const(iDeviceInfo)[] infos) {
+    iDeviceEntry[] result;
+    size_t[string] indexByUdid;
+
+    foreach (info; infos) {
+        size_t idx;
+        if (auto existing = info.udid in indexByUdid) {
+            idx = *existing;
+        } else {
+            idx = result.length;
+            indexByUdid[info.udid] = idx;
+            result ~= iDeviceEntry(info.udid);
+        }
+        final switch (info.connType) {
+            case iDeviceConnectionType.usbmuxd:
+                result[idx].overUsb = true;
+                break;
+            case iDeviceConnectionType.network:
+                result[idx].overNetwork = true;
+                break;
+        }
+    }
+
+    return result;
+}
+
+/// Outcome category of `selectDevice`.
+enum DeviceSelectionStatus {
+    selected,   /// exactly one device was chosen (`device`/`connType` are valid)
+    noDevice,   /// no (matching) device is connected
+    ambiguous,  /// several devices are connected and no `--udid` was given
+}
+
+/// Result of resolving which connected device a command should act on.
+struct DeviceSelection {
+    DeviceSelectionStatus status;
+    iDeviceEntry device;          /// valid only when `status == selected`
+    iDeviceConnectionType connType; /// the transport chosen for `device`
+}
+
+/**
+ * Resolves which deduped device a command should act on, PURELY over a list of
+ * `iDeviceEntry`.
+ *
+ *  - `requestedUdid` (optional): when non-empty, only a device with that exact
+ *    udid is eligible; a miss yields `noDevice`.
+ *  - `preference`: when the chosen device is reachable both ways, picks the USB
+ *    or the network transport accordingly.
+ *
+ * Returns `selected` with the chosen entry and the concrete transport, or
+ * `noDevice` / `ambiguous` so the caller can print the right guidance. Pure and
+ * offline, hence unit-testable.
+ */
+DeviceSelection selectDevice(const(iDeviceEntry)[] devices, string requestedUdid,
+        TransportPreference preference = TransportPreference.preferUsb) {
+    iDeviceConnectionType pickTransport(const ref iDeviceEntry d) {
+        if (d.overUsb && d.overNetwork)
+            return preference == TransportPreference.preferNetwork
+                ? iDeviceConnectionType.network
+                : iDeviceConnectionType.usbmuxd;
+        return d.overNetwork ? iDeviceConnectionType.network : iDeviceConnectionType.usbmuxd;
+    }
+
+    if (requestedUdid.length) {
+        foreach (d; devices) {
+            if (d.udid == requestedUdid)
+                return DeviceSelection(DeviceSelectionStatus.selected, d, pickTransport(d));
+        }
+        return DeviceSelection(DeviceSelectionStatus.noDevice);
+    }
+
+    if (devices.length == 0)
+        return DeviceSelection(DeviceSelectionStatus.noDevice);
+
+    if (devices.length > 1)
+        return DeviceSelection(DeviceSelectionStatus.ambiguous);
+
+    return DeviceSelection(DeviceSelectionStatus.selected, devices[0], pickTransport(devices[0]));
+}
+
+unittest {
+    alias Info = iDeviceInfo;
+    enum usb = iDeviceConnectionType.usbmuxd;
+    enum net = iDeviceConnectionType.network;
+
+    // --- dedupDevices ---
+
+    // USB-only.
+    {
+        auto d = dedupDevices([Info("A", usb)]);
+        assert(d.length == 1);
+        assert(d[0].udid == "A" && d[0].overUsb && !d[0].overNetwork);
+        assert(d[0].transportLabel == "USB");
+    }
+
+    // Wi-Fi-only.
+    {
+        auto d = dedupDevices([Info("A", net)]);
+        assert(d.length == 1);
+        assert(!d[0].overUsb && d[0].overNetwork);
+        assert(d[0].transportLabel == "Wi-Fi");
+    }
+
+    // Same udid on both transports collapses into ONE entry.
+    {
+        auto d = dedupDevices([Info("A", usb), Info("A", net)]);
+        assert(d.length == 1);
+        assert(d[0].overUsb && d[0].overNetwork);
+        assert(d[0].transportLabel == "USB+Wi-Fi");
+    }
+
+    // Order/independence: network seen first then USB still folds to one.
+    {
+        auto d = dedupDevices([Info("A", net), Info("A", usb)]);
+        assert(d.length == 1 && d[0].overUsb && d[0].overNetwork);
+    }
+
+    // Distinct udids stay separate, first-appearance order preserved.
+    {
+        auto d = dedupDevices([Info("B", usb), Info("A", net), Info("A", usb)]);
+        assert(d.length == 2);
+        assert(d[0].udid == "B");
+        assert(d[1].udid == "A" && d[1].overUsb && d[1].overNetwork);
+    }
+
+    // Empty -> empty.
+    assert(dedupDevices([]).length == 0);
+
+    // --- selectDevice ---
+
+    // No devices -> noDevice.
+    {
+        auto s = selectDevice([], "");
+        assert(s.status == DeviceSelectionStatus.noDevice);
+    }
+
+    // Exactly one (USB) -> selected silently over USB (no regression).
+    {
+        auto d = dedupDevices([Info("A", usb)]);
+        auto s = selectDevice(d, "");
+        assert(s.status == DeviceSelectionStatus.selected);
+        assert(s.device.udid == "A" && s.connType == usb);
+    }
+
+    // Exactly one (Wi-Fi-only) -> selected over the network.
+    {
+        auto d = dedupDevices([Info("A", net)]);
+        auto s = selectDevice(d, "");
+        assert(s.status == DeviceSelectionStatus.selected && s.connType == net);
+    }
+
+    // Multiple distinct -> ambiguous (without a udid).
+    {
+        auto d = dedupDevices([Info("A", usb), Info("B", usb)]);
+        auto s = selectDevice(d, "");
+        assert(s.status == DeviceSelectionStatus.ambiguous);
+    }
+
+    // A device on BOTH transports is ONE device, so still selected silently.
+    {
+        auto d = dedupDevices([Info("A", usb), Info("A", net)]);
+        auto s = selectDevice(d, "");
+        assert(s.status == DeviceSelectionStatus.selected);
+        // Default prefers USB when both are available.
+        assert(s.connType == usb);
+    }
+
+    // --wifi / preferNetwork picks the network transport when both available.
+    {
+        auto d = dedupDevices([Info("A", usb), Info("A", net)]);
+        auto s = selectDevice(d, "", TransportPreference.preferNetwork);
+        assert(s.status == DeviceSelectionStatus.selected && s.connType == net);
+    }
+
+    // preferNetwork on a USB-only device still selects USB (it's all there is).
+    {
+        auto d = dedupDevices([Info("A", usb)]);
+        auto s = selectDevice(d, "", TransportPreference.preferNetwork);
+        assert(s.status == DeviceSelectionStatus.selected && s.connType == usb);
+    }
+
+    // udid filter hit -> selected, even amid several devices.
+    {
+        auto d = dedupDevices([Info("A", usb), Info("B", net)]);
+        auto s = selectDevice(d, "B");
+        assert(s.status == DeviceSelectionStatus.selected);
+        assert(s.device.udid == "B" && s.connType == net);
+    }
+
+    // udid filter miss -> noDevice.
+    {
+        auto d = dedupDevices([Info("A", usb)]);
+        auto s = selectDevice(d, "ZZZ");
+        assert(s.status == DeviceSelectionStatus.noDevice);
+    }
+}
+
 public class iDevice {
     alias iDeviceEventCallback = void delegate(ref const(iDeviceEvent) event);
 
@@ -117,6 +361,22 @@ public class iDevice {
 
     public this(string udid) {
         idevice_new_with_options(&handle, udid.toStringz, idevice_options.IDEVICE_LOOKUP_USBMUX | idevice_options.IDEVICE_LOOKUP_NETWORK).assertSuccess();
+        handle.assertHandle("iDevice");
+    }
+
+    /**
+     * Constructs a device, optionally biasing the lookup toward the network
+     * transport (issue #13). When `preferNetwork` is set we add
+     * `IDEVICE_LOOKUP_PREFER_NETWORK` so that, for a device reachable both over
+     * USB and over Wi-Fi, libimobiledevice opens the network connection. Both
+     * USBMUX and NETWORK lookups stay enabled, so a Wi-Fi-only or USB-only device
+     * still connects.
+     */
+    public this(string udid, TransportPreference preference) {
+        auto options = idevice_options.IDEVICE_LOOKUP_USBMUX | idevice_options.IDEVICE_LOOKUP_NETWORK;
+        if (preference == TransportPreference.preferNetwork)
+            options |= idevice_options.IDEVICE_LOOKUP_PREFER_NETWORK;
+        idevice_new_with_options(&handle, udid.toStringz, options).assertSuccess();
         handle.assertHandle("iDevice");
     }
 

@@ -27,6 +27,9 @@ struct InstallCommand
     @(NamedArgument("udid").Description("UDID of the device (if multiple are available)."))
     string udid = null;
 
+    @(NamedArgument("wifi", "prefer-network").Description("Prefer connecting over Wi-Fi when the device is reachable both over USB and Wi-Fi (requires a prior USB pairing with Wi-Fi sync enabled)."))
+    bool wifi = false;
+
     @(NamedArgument("singlethread").Description("Run the signature process on a single thread. Sacrifices speed for more consistency."))
     bool singlethreaded;
 
@@ -48,24 +51,10 @@ struct InstallCommand
         // are not silently bound to the first team.
         auto team = selectTeamInteractive(session, teamId);
 
-        auto devices = iDevice.deviceList();
-        string udid = this.udid;
-        if (!udid) {
-            if (devices.length == 1) {
-                udid = devices[0].udid;
-            } else {
-                if (!devices.length) {
-                    log.error("No device connected.");
-                    return 1;
-                }
-                if (!this.udid) {
-                    log.error("Multiple devices are connected. Please select one with --udid.");
-                }
-            }
-        }
-
-        log.infoF!"Initiating connection the device (UUID: %s)"(udid);
-        auto device = new iDevice(udid);
+        string chosenUdid, transportLabel;
+        auto device = selectConnectedDevice(this.udid, wifi, chosenUdid, transportLabel);
+        if (!device)
+            return 1;
         Bar progressBar = new Bar();
         string message;
         progressBar.message = () => message;
