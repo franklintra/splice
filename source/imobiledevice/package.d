@@ -32,6 +32,15 @@ void assertSuccess(T)(T err) {
         throw new iMobileDeviceException!T(err);
 }
 
+/// Ensures a C constructor that reported success actually produced a usable
+/// handle. Some libimobiledevice entry points can return success while leaving
+/// the out-handle null; proceeding with a null handle leads to a later crash, so
+/// fail fast with a clear exception instead.
+void assertHandle(T)(T handle, string what = "object") {
+    if (!handle)
+        throw new Exception(format!"Failed to create %s: the underlying handle is null."(what));
+}
+
 enum iDeviceEventType
 {
     add = 1,
@@ -100,6 +109,7 @@ public class iDevice {
 
     public this(string udid) {
         idevice_new_with_options(&handle, udid.toStringz, idevice_options.IDEVICE_LOOKUP_USBMUX | idevice_options.IDEVICE_LOOKUP_NETWORK).assertSuccess();
+        handle.assertHandle("iDevice");
     }
 
     ~this() {
@@ -114,6 +124,7 @@ public class LockdowndClient {
 
     public this(iDevice device, string serviceName) {
         lockdownd_client_new_with_handshake(device.handle, &handle, cast(const(char)*) serviceName.toStringz).assertSuccess();
+        handle.assertHandle("LockdowndClient");
     }
 
     public @property string deviceName() {
@@ -125,6 +136,7 @@ public class LockdowndClient {
     public LockdowndServiceDescriptor startService(string identifier) {
         lockdownd_service_descriptor_t descriptor;
         lockdownd_start_service(handle, identifier.toStringz, &descriptor).assertSuccess();
+        descriptor.assertHandle("lockdown service descriptor for " ~ identifier);
         return new LockdowndServiceDescriptor(descriptor);
     }
 
@@ -182,6 +194,7 @@ public class InstallationProxyClient {
 
     public this(iDevice device, LockdowndServiceDescriptor service) {
         instproxy_client_new(device.handle, service, &handle).assertSuccess();
+        handle.assertHandle("InstallationProxyClient");
     }
 
     alias StatusCallback = void delegate(Plist command, Plist status);
@@ -220,10 +233,12 @@ public class AFCClient {
 
     public this(iDevice device, LockdowndServiceDescriptor service) {
         afc_client_new(device.handle, service, &handle).assertSuccess();
+        handle.assertHandle("AFCClient");
     }
 
     public this(HouseArrestClient houseArrestClient) {
         afc_client_new_from_house_arrest_client(houseArrestClient.handle, &handle).assertSuccess();
+        handle.assertHandle("AFCClient");
     }
 
     ~this() {
@@ -280,6 +295,7 @@ public class MisagentClient {
 
     public this(iDevice device, LockdowndServiceDescriptor service) {
         misagent_client_new(device.handle, service, &handle).assertSuccess();
+        handle.assertHandle("MisagentClient");
     }
 
     void install(Plist profile) {
@@ -298,10 +314,12 @@ public class HouseArrestClient {
 
     public this(iDevice device, LockdowndServiceDescriptor service) {
         house_arrest_client_new(device.handle, service, &handle).assertSuccess();
+        handle.assertHandle("HouseArrestClient");
     }
 
     public this(iDevice device, string label = null) {
         house_arrest_client_start_service(device.handle, &handle, label.toStringz()).assertSuccess();
+        handle.assertHandle("HouseArrestClient");
     }
 
     void sendCommand(string command, string appId) {

@@ -42,6 +42,9 @@ enum AppleLoginErrorCode {
     misformattedEncryptedToken = 2,
     no2FAAttempt = 3,
     unsupportedNextStep = 4,
+    anisetteProvisioningFailed = 5,
+    urlSwitchingUnsupported = 6,
+    tooManyRetries = 7,
     accountLocked = -20209,
     invalidValidationCode = -21669,
     invalidPassword = -22406,
@@ -118,7 +121,8 @@ package class AppleAccount {
             auto time = Clock.currTime();
 
             Request request = Request();
-            request.sslSetVerifyPeer(false); // FIXME: SSL pin
+            // Validate Apple's TLS certificate against the system trust store (MITM-resistant).
+            request.sslSetVerifyPeer(true);
 
             request.addHeaders(cast(string[string]) [
                 "X-Apple-I-MD": Base64.encode(otp.oneTimePassword),
@@ -197,6 +201,14 @@ package class AppleAccount {
     }
 
     package static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler) {
+        return login(applicationInformation, device, adi, appleId, password, nextStepHandler, 0);
+    }
+
+    // Maximum number of times we will reprovision/resync/switch-URL and retry the
+    // login before giving up, to avoid an infinite loop if the server keeps asking.
+    private enum maxLoginRetries = 2;
+
+    private static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, uint attempt) {
         auto log = getLogger();
 
         log.info("Logging in...");
@@ -204,7 +216,8 @@ package class AppleAccount {
         appleId = appleId.toLower();
 
         Request request = Request();
-        request.sslSetVerifyPeer(false); // FIXME: SSL pin
+        // Validate Apple's TLS certificate against the system trust store (MITM-resistant).
+        request.sslSetVerifyPeer(true);
 
         request.addHeaders([
             "Content-Type": "text/x-xml-plist",
@@ -414,19 +427,61 @@ package class AppleAccount {
                 string identityToken = Base64.encode(cast(ubyte[]) (adsid ~ ":" ~ idmsToken));
                 return nextStepHandler(identityToken, urls, secondaryActionKey, canIgnore).match!(
                     (AppleLoginError error) => AppleLoginResponse(error),
-                    (ReloginNeeded _) => login(applicationInformation, device, adi, appleId, password, nextStepHandler),
+                    (ReloginNeeded _) => login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt),
                     (Success _) => completeAuthentication(),
                 );
             case 433: /+ anisetteReprovisionRequired +/
-                log.errorF!"Server requested Anisette reprovision that has not been implemented yet! Here is some debug info: %s"(response2Str);
-                break;
+                if (attempt >= maxLoginRetries) {
+                    return AppleLoginResponse(AppleLoginError(
+                        AppleLoginErrorCode.tooManyRetries,
+                        format!"Apple keeps requesting Anisette reprovisioning after %d attempts; giving up."(attempt)
+                    ));
+                }
+                log.warnF!"Server requested Anisette reprovision (attempt %d). Wiping and re-provisioning..."(attempt + 1);
+                try {
+                    adi.eraseProvisioning(-2);
+                    auto provisioningSession = new ProvisioningSession(adi, device);
+                    provisioningSession.provision(-2);
+                } catch (Exception e) {
+                    return AppleLoginResponse(AppleLoginError(
+                        AppleLoginErrorCode.anisetteProvisioningFailed,
+                        format!"Anisette reprovisioning failed: %s"(e.msg)
+                    ));
+                }
+                log.info("Reprovisioned successfully, retrying login...");
+                return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1);
             case 434: /+ anisetteResyncRequired +/
-                auto resyncData = status2["X-Apple-I-MD-DATA"].str().native();
-                log.errorF!"Server requested Anisette resync has not been implemented yet! Here is some debug info: %s"(response2Str);
-                break;
+                if (attempt >= maxLoginRetries) {
+                    return AppleLoginResponse(AppleLoginError(
+                        AppleLoginErrorCode.tooManyRetries,
+                        format!"Apple keeps requesting Anisette resync after %d attempts; giving up."(attempt)
+                    ));
+                }
+                log.warnF!"Server requested Anisette resync (attempt %d). Synchronizing..."(attempt + 1);
+                try {
+                    auto resyncData = status2["X-Apple-I-MD-DATA"].str().native();
+                    ubyte[] serverIntermediateMetadata = Base64.decode(resyncData);
+                    adi.synchronize(-2, serverIntermediateMetadata);
+                } catch (Exception e) {
+                    return AppleLoginResponse(AppleLoginError(
+                        AppleLoginErrorCode.anisetteProvisioningFailed,
+                        format!"Anisette resync failed: %s"(e.msg)
+                    ));
+                }
+                log.info("Resynchronized successfully, retrying login...");
+                return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1);
             case 435: /+ urlSwitchingRequired +/
-                log.errorF!"URL switching has not been implemented yet! Here is some debug info: %s"(response2Str);
-                break;
+                // Apple wants us to retry against a different GSA endpoint. The
+                // exact location of the replacement URL in the response could not
+                // be confirmed without a live Apple flow, so rather than silently
+                // proceeding against the old endpoint (which would loop or fail),
+                // surface a clear, actionable error.
+                log.errorF!"Server requested URL switching (hsc 435). Response: %s"(response2Str);
+                return AppleLoginResponse(AppleLoginError(
+                    AppleLoginErrorCode.urlSwitchingUnsupported,
+                    "Apple requested a GSA endpoint switch (status 435) which is not yet supported. " ~
+                    "Please report this along with the debug logs."
+                ));
             default: break;
         }
 
@@ -469,7 +524,8 @@ package class AppleAccount {
         auto otp = adi.requestOTP(-2);
         auto time = Clock.currTime();
 
-        rq.sslSetVerifyPeer(false); // FIXME: SSL pin
+        // Validate Apple's TLS certificate against the system trust store (MITM-resistant).
+        rq.sslSetVerifyPeer(true);
         rq.addHeaders(cast(string[string]) [
             "Content-Type": "text/x-xml-plist",
             "Accept": "text/x-xml-plist",

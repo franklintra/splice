@@ -37,6 +37,11 @@ void sideloadFull(
     enum STEP_COUNT = 9.0;
     auto log = getLogger();
 
+    // Remove the IPA extraction temp dir once we are completely done (signing and
+    // transfer both read from it, so this only runs after the whole flow exits,
+    // success or failure). Non-fatal by construction (cleanup() swallows errors).
+    scope(exit) app.cleanup();
+
     bool isSideStore = app.bundleIdentifier() == "com.SideStore.SideStore";
 
     // select the first development team
