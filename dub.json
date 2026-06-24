@@ -39,6 +39,7 @@
 
     "versions": [
         "AES", "AEAD_GCM", "CTR_BE", "X931_RNG", "PBKDF2", "PBKDF1", "HMAC_DRBG",
+        "EMSA_PKCS1",
         "DisableDebugger"
     ],
 
