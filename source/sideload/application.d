@@ -19,8 +19,13 @@ import sideload.plugin;
 
 class Application: Bundle {
     string tempPath;
+    /// The path the application was opened from (the source IPA when opened from
+    /// a file, otherwise the app bundle folder). Used by the installed-apps
+    /// registry to remember where to re-sign from later.
+    string sourcePath;
 
     this(string path) {
+        sourcePath = path;
         if (file.isFile(path)) {
             tempPath = file.tempDir().buildPath(baseName(path));
             if (file.exists(tempPath)) {

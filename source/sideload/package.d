@@ -238,6 +238,48 @@ void sideloadFull(
             (typeof(null)) {}
     );
 
+    // Record the successful install in the persistent registry so a later run
+    // knows which apps are installed and when each expires, without contacting
+    // Apple. Non-fatal: a registry failure must never fail the install.
+    try {
+        import std.datetime : Clock;
+        import persistence = app.persistence;
+
+        auto registry = persistence.loadInstalledRegistry(configurationPath);
+        registry.upsert(persistence.InstalledApp(
+            mainAppBundleId,
+            team.teamId,
+            certIdentity.publicKeyFingerprint(),
+            Clock.currTime().toISOExtString(),
+            mainAppId.expirationDate.toISOExtString(),
+            app.sourcePath,
+            mainAppName,
+        ));
+        persistence.saveInstalledRegistry(configurationPath, registry);
+
+        // Also remember the account + cert/profile metadata in state.json.
+        auto state = persistence.loadState(configurationPath);
+        state.upsertAccount(developer.appleId);
+        state.upsertCertificate(persistence.CachedCertificate(
+            team.teamId,
+            "",
+            certIdentity.publicKeyFingerprint(),
+            buildPath("certs", team.teamId, "cert.pem"),
+        ));
+        if (auto mainProfile = mainAppIdStr in provisioningProfiles) {
+            state.upsertProfile(persistence.CachedProfile(
+                mainAppBundleId,
+                team.teamId,
+                mainProfile.provisioningProfileId,
+                mainProfile.name,
+                mainAppId.expirationDate.toISOExtString(),
+            ));
+        }
+        persistence.saveState(configurationPath, state);
+    } catch (Exception e) {
+        log.warnF!"Could not record install in the persistence layer: %s"(e.msg);
+    }
+
     progressCallback(1.0, "Done!");
 }
 
