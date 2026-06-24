@@ -177,6 +177,31 @@ eventually install it with Sideloader on a real device (or maybe even an emulate
 in the future!) and debug it (with `idevicedebug` or remote `lldb`). _(TODO: add an option
 to add the entitlement for debugging)_
 
+## Remote anisette servers
+
+To talk to Apple's GrandSlam servers, Sideloader has to attach a set of
+device/identity ("anisette") headers to every request. By default it produces
+them **locally**, by emulating Apple's provisioning with native libraries it
+scrapes from the Apple Music APK. That works without any external service, but
+requires downloading those Android libraries and provisioning a machine.
+
+Alternatively, you can point Sideloader at a **remote anisette server** with:
+
+```sh
+sideloader --anisette-server https://your-anisette-server.example/ <command>
+```
+
+The URL is **persisted** as the new default, so subsequent runs reuse it without
+the flag. When a remote server is configured, Sideloader skips the local Android
+library download and ADI provisioning entirely. Pass an empty value or edit
+`state.json` to go back to local emulation.
+
+This is compatible with both **anisette-v1** and **anisette-v3** servers (the
+`GET /` headers endpoint they both expose), for example
+[Dadoum/anisette-v3-server](https://github.com/Dadoum/anisette-v3-server), which
+you can self-host. Without `--anisette-server`, Sideloader falls back to local
+emulation by scraping the Apple Music APK as described above.
+
 ## Features
 
 - Sideload

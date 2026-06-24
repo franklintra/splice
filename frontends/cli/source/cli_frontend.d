@@ -29,6 +29,7 @@ import provision;
 
 import imobiledevice;
 
+import server.anisette;
 import server.appleaccount;
 import server.developersession;
 import version_string;
@@ -56,6 +57,14 @@ noreturn wrongArgument(string msg) {
     getLogger().error(msg);
     exit(1);
 }
+
+/**
+ * Remote anisette server URL selected for this invocation, resolved in
+ * `entryPoint` from the `--anisette-server` flag (falling back to the persisted
+ * default). Empty means "use local emulation". It is consumed by `makeSession`,
+ * which has no direct access to the top-level `Commands` struct.
+ */
+package string g_anisetteServer = "";
 
 auto openApp(string path) {
     if (!file.exists(path))
@@ -107,7 +116,7 @@ string readPasswordLine(string prompt) {
 
 /// Attempts an Apple login with the given credentials, wiring the interactive
 /// 2FA prompt. Returns the session on success, or `null` on failure.
-private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, string password) {
+private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, string password, AnisetteProvider anisetteProvider = null) {
     auto log = getLogger();
     return DeveloperSession.login(
         device,
@@ -125,7 +134,8 @@ private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, st
                     continue;
                 }
             } while (submitCode(code).match!((Success _) => false, (ReloginNeeded _) => false, (AppleLoginError _) => true));
-        })
+        },
+        anisetteProvider)
     .match!(
         (DeveloperSession session) => session,
         (AppleLoginError error) {
@@ -135,7 +145,7 @@ private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, st
     );
 }
 
-DeveloperSession login(Device device, ADI adi, bool interactive) {
+DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvider anisetteProvider = null) {
     import keyring;
 
     auto log = getLogger();
@@ -148,7 +158,7 @@ DeveloperSession login(Device device, ADI adi, bool interactive) {
     string storedAppleId, storedPassword;
     if (deserializeCredentials(kr.lookup(), storedAppleId, storedPassword)) {
         log.infoF!"Found stored credentials for %s, logging in silently..."(storedAppleId);
-        if (auto session = attemptLogin(device, adi, storedAppleId, storedPassword))
+        if (auto session = attemptLogin(device, adi, storedAppleId, storedPassword, anisetteProvider))
             return session;
         log.warn("Silent login with stored credentials failed; clearing them.");
         kr.clear();
@@ -166,7 +176,7 @@ DeveloperSession login(Device device, ADI adi, bool interactive) {
     string appleId = readln().chomp();
     string password = readPasswordLine("Password: ");
 
-    auto session = attemptLogin(device, adi, appleId, password);
+    auto session = attemptLogin(device, adi, appleId, password, anisetteProvider);
     if (session) {
         // Persist the credentials in the OS secure store so subsequent runs
         // don't have to prompt again.
@@ -197,6 +207,30 @@ auto initializeADI(string configurationPath)
     return provisioningData;
 }
 
+/**
+ * Resolves the remote anisette server URL for this invocation.
+ *
+ * Precedence: the `--anisette-server` flag (`g_anisetteServer`, set in
+ * `entryPoint`) wins and is persisted as the new default; otherwise the persisted
+ * default from `state.json` is used; if neither is set, returns empty (meaning
+ * "use local emulation").
+ */
+string resolveAnisetteServer(string configurationPath)
+{
+    import app.persistence : loadState, saveState;
+
+    auto state = loadState(configurationPath);
+    if (g_anisetteServer.length) {
+        // Explicit flag: use it and persist it as the new default.
+        if (state.anisetteServer != g_anisetteServer) {
+            state.anisetteServer = g_anisetteServer;
+            saveState(configurationPath, state);
+        }
+        return g_anisetteServer;
+    }
+    return state.anisetteServer;
+}
+
 // planned commands
 
 import account;
@@ -213,17 +247,24 @@ import tool;
 mixin template LoginCommand()
 {
     import provision;
+    import server.anisette : AnisetteProvider, RemoteAnisetteProvider;
+    static import app;
     import app.session : SideloaderSession;
     @(NamedArgument("i", "interactive").Description("Prompt to type passwords if needed."))
     bool interactive = false;
 
-    final auto login(Device device, ADI adi) => cli_frontend.login(device, adi, interactive);
+    final auto login(Device device, ADI adi, AnisetteProvider anisetteProvider) =>
+        cli_frontend.login(device, adi, interactive, anisetteProvider);
 
     /**
-     * Builds a `SideloaderSession` with the resolved configuration path and the
-     * provisioned device/adi (downloading the ADI native libraries first if
-     * needed, via the CLI `initializeADI`), then logs in using the interactive
-     * CLI login strategy.
+     * Builds a `SideloaderSession` with the resolved configuration path, then logs
+     * in using the interactive CLI login strategy.
+     *
+     * Anisette headers come from a remote anisette server when one is configured
+     * (`--anisette-server` or the persisted default); in that case we skip the
+     * Android ADI native-library download and machine provisioning entirely, only
+     * creating the local `Device` identity. Otherwise we fall back to local
+     * emulation (downloading the libraries and provisioning ADI as before).
      *
      * Returns the session on success, or `null` when login failed (the caller
      * should `return 1`).
@@ -231,9 +272,23 @@ mixin template LoginCommand()
     final SideloaderSession makeSession()
     {
         string configurationPath = systemConfigurationPath();
+        string anisetteServer = resolveAnisetteServer(configurationPath);
+
+        if (anisetteServer.length) {
+            getLogger().infoF!"Using remote anisette server: %s"(anisetteServer);
+            // Remote anisette: no Android libraries / ADI provisioning needed.
+            auto device = app.initializeDevice(configurationPath);
+            auto provider = cast(AnisetteProvider) new RemoteAnisetteProvider(anisetteServer);
+            auto session = new SideloaderSession(configurationPath);
+            session.device = device;
+            session.developerSession = login(device, null, provider);
+            return session.developerSession ? session : null;
+        }
+
+        // Local emulation path (unchanged): download libs + provision ADI.
         scope provisioningData = initializeADI(configurationPath);
         auto session = new SideloaderSession(configurationPath, provisioningData);
-        if (!session.ensureLoggedIn((device, adi) => login(device, adi)))
+        if (!session.ensureLoggedIn((device, adi) => login(device, adi, null)))
             return null;
         return session;
     }
@@ -298,6 +353,9 @@ int entryPoint(Commands commands)
     defaultPoolThreads = commands.threadCount;
     configureLoggingProvider(new shared DefaultProvider(true, commands.debug_ ? Levels.TRACE : Levels.INFO));
 
+    // Surface the chosen anisette server to the (commands-unaware) makeSession path.
+    g_anisetteServer = commands.anisetteServer.strip();
+
     try
     {
         return commands.cmd.match!(
@@ -329,6 +387,9 @@ struct Commands
 
     @(NamedArgument("thread-count").Description("Numbers of threads to be used for signing the application bundle"))
     uint threadCount = uint.max;
+
+    @(NamedArgument("anisette-server").Description("Use a remote anisette server (anisette-v1/v3 compatible) instead of local emulation. The URL is persisted as the new default."))
+    string anisetteServer = "";
 
     @SubCommands
     SumType!(AppIdCommand, CertificateCommand, DeviceCommand, InstallCommand, LoginAccountCommand, LogoutCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, VersionCommand) cmd;

@@ -20,6 +20,7 @@ import provision;
 import plist;
 
 import constants;
+import server.anisette;
 import server.appleaccount;
 import server.applicationinformation;
 import utils;
@@ -82,10 +83,10 @@ class DeveloperSession {
         this.appleAccount = appleAccount;
     }
 
-    static DeveloperLoginResponse login(Device device, ADI adi, string appleId, string password, TFAHandlerDelegate tfaHandler) {
+    static DeveloperLoginResponse login(Device device, ADI adi, string appleId, string password, TFAHandlerDelegate tfaHandler, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
         log.infoF!"Creating DeveloperSession for %s..."(appleId);
-        return AppleAccount.login(XcodeApplicationInformation, device, adi, appleId, password, tfaHandler).match!(
+        return AppleAccount.login(XcodeApplicationInformation, device, adi, appleId, password, tfaHandler, anisetteProvider).match!(
             (AppleAccount appleAccount) {
                 log.info("DeveloperSession created successfully.");
                 return DeveloperLoginResponse(new DeveloperSession(appleAccount));
@@ -97,10 +98,10 @@ class DeveloperSession {
         );
     }
 
-    static DeveloperLoginResponse login(Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler) {
+    static DeveloperLoginResponse login(Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
         log.infoF!"Creating DeveloperSession for %s..."(appleId);
-        return AppleAccount.login(XcodeApplicationInformation, device, adi, appleId, password, nextStepHandler).match!(
+        return AppleAccount.login(XcodeApplicationInformation, device, adi, appleId, password, nextStepHandler, anisetteProvider).match!(
             (AppleAccount appleAccount) {
                 log.info("DeveloperSession created successfully.");
                 return DeveloperLoginResponse(new DeveloperSession(appleAccount));

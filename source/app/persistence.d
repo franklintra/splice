@@ -135,6 +135,8 @@ struct SideloaderState {
     AccountRecord[] accounts;
     CachedCertificate[] certificates;
     CachedProfile[] profiles;
+    /// Persisted default remote anisette server URL (empty = use local emulation).
+    string anisetteServer;
 
     /// Records (or refreshes) an account by Apple ID without duplicating it.
     void upsertAccount(string appleId) {
@@ -175,6 +177,7 @@ struct SideloaderState {
             "accounts": JSONValue(accounts.map!((a) => a.toJSON()).array()),
             "certificates": JSONValue(certificates.map!((c) => c.toJSON()).array()),
             "profiles": JSONValue(profiles.map!((p) => p.toJSON()).array()),
+            "anisetteServer": JSONValue(anisetteServer),
         ]);
     }
 
@@ -184,6 +187,7 @@ struct SideloaderState {
         s.accounts = v.getArray("accounts").map!((e) => AccountRecord.fromJSON(e)).array();
         s.certificates = v.getArray("certificates").map!((e) => CachedCertificate.fromJSON(e)).array();
         s.profiles = v.getArray("profiles").map!((e) => CachedProfile.fromJSON(e)).array();
+        s.anisetteServer = v.getStr("anisetteServer");
         return s;
     }
 }
@@ -388,10 +392,12 @@ unittest {
     s.upsertAccount("alice@example.com");
     s.upsertCertificate(CachedCertificate("TEAM1", "CERTID", "abc123", "certs/TEAM1/cert.pem"));
     s.upsertProfile(CachedProfile("com.example.app", "TEAM1", "PPID", "name", "2026-07-01T00:00:00"));
+    s.anisetteServer = "https://ani.example.com/";
 
     auto json = s.toJSON();
     auto reparsed = SideloaderState.fromJSON(parseJSON(json.toString()));
 
+    assert(reparsed.anisetteServer == "https://ani.example.com/");
     assert(reparsed.version_ == stateSchemaVersion);
     assert(reparsed.accounts.length == 1);
     assert(reparsed.accounts[0].appleId == "alice@example.com");

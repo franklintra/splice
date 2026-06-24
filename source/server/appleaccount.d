@@ -33,6 +33,7 @@ import provision;
 import plist;
 
 import constants;
+import server.anisette;
 import server.applicationinformation;
 import server.applesrpsession;
 import utils;
@@ -74,6 +75,11 @@ package class AppleAccount {
     private Device device;
     private ADI adi;
 
+    // Source of the anisette headers (X-Apple-I-MD*, X-Mme-*). Defaults to a
+    // LocalAnisetteProvider built from `device`+`adi`, but may be a
+    // RemoteAnisetteProvider pointing at an anisette-v1/v3 server.
+    private AnisetteProvider anisetteProvider;
+
     private ApplicationInformation appInfo;
 
     private string appleIdentifier;
@@ -86,9 +92,10 @@ package class AppleAccount {
         return appleIdentifier;
     }
 
-    package this(Device device, ADI adi, ApplicationInformation appInfo, string[string] urlBag, string appleId, string adsid, string token) {
+    package this(Device device, ADI adi, AnisetteProvider anisetteProvider, ApplicationInformation appInfo, string[string] urlBag, string appleId, string adsid, string token) {
         this.device = device;
         this.adi = adi;
+        this.anisetteProvider = anisetteProvider !is null ? anisetteProvider : new LocalAnisetteProvider(device, adi);
         this.appInfo = appInfo;
         this.urls = urlBag;
         this.appleIdentifier = appleId;
@@ -96,8 +103,11 @@ package class AppleAccount {
         this.token = token;
     }
 
-    package static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, TFAHandlerDelegate tfaHandler) {
+    package static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, TFAHandlerDelegate tfaHandler, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
+        // Resolve the anisette source once so the 2FA sub-flow and the recursive
+        // NextLoginStepHandler login share the same provider.
+        auto resolvedAnisette = anisetteProvider !is null ? anisetteProvider : new LocalAnisetteProvider(device, adi);
         return login(applicationInformation, device, adi, appleId, password, (string identityToken, string[string] urls, string urlBagKey, bool canIgnore) {
             if (urlBagKey == "repair") {
                 log.info("Apple tells us that your account is broken. We don't care (they actually just want you to add 2FA).");
@@ -117,25 +127,24 @@ package class AppleAccount {
 
             log.debug_("2FA with trusted device needed.");
             // 2FA is needed
-            auto otp = adi.requestOTP(-2);
-            auto time = Clock.currTime();
+            auto anisette = resolvedAnisette.headers();
 
             Request request = Request();
             // Validate Apple's TLS certificate against the system trust store (MITM-resistant).
             request.sslSetVerifyPeer(true);
 
             request.addHeaders(cast(string[string]) [
-                "X-Apple-I-MD": Base64.encode(otp.oneTimePassword),
-                "X-Apple-I-MD-M": Base64.encode(otp.machineIdentifier),
-                "X-Apple-I-MD-RINFO": "17106176",
+                "X-Apple-I-MD": anisette.oneTimePassword,
+                "X-Apple-I-MD-M": anisette.machineId,
+                "X-Apple-I-MD-RINFO": anisette.routingInfo,
 
-                "X-Apple-I-Client-Time": time.stripMilliseconds().toISOExtString(),
-                "X-Apple-Locale": locale(),
-                "X-Apple-I-TimeZone": time.timezone.dstName,
+                "X-Apple-I-Client-Time": anisette.clientTime,
+                "X-Apple-Locale": anisette.locale,
+                "X-Apple-I-TimeZone": anisette.timeZone,
 
                 "X-Apple-Identity-Token": identityToken,
 
-                "X-Mme-Client-Info": device.serverFriendlyDescription,
+                "X-Mme-Client-Info": anisette.clientInfo,
 
                 "User-Agent": applicationInformation.applicationName
             ]);
@@ -197,23 +206,27 @@ package class AppleAccount {
 
             tfaHandler(sendCode, submitCode);
             return response;
-        });
+        }, resolvedAnisette);
     }
 
-    package static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler) {
-        return login(applicationInformation, device, adi, appleId, password, nextStepHandler, 0);
+    package static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, AnisetteProvider anisetteProvider = null) {
+        return login(applicationInformation, device, adi, appleId, password, nextStepHandler, 0, anisetteProvider);
     }
 
     // Maximum number of times we will reprovision/resync/switch-URL and retry the
     // login before giving up, to avoid an infinite loop if the server keeps asking.
     private enum maxLoginRetries = 2;
 
-    private static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, uint attempt) {
+    private static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, uint attempt, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
 
         log.info("Logging in...");
 
         appleId = appleId.toLower();
+
+        // Resolve the anisette source. When none is supplied this is the historical
+        // LocalAnisetteProvider(device, adi) path, so behaviour is byte-identical.
+        auto anisette = anisetteProvider !is null ? anisetteProvider : new LocalAnisetteProvider(device, adi);
 
         Request request = Request();
         // Validate Apple's TLS certificate against the system trust store (MITM-resistant).
@@ -226,7 +239,7 @@ package class AppleAccount {
             // "X-Mme-Device-Id": device.uniqueDeviceIdentifier,
             // on macOS, MMe for the Client-Info header is written with 2 caps, while on Windows it is Mme...
             // and HTTP headers are supposed to be case-insensitive in the HTTP spec...
-            "X-Mme-Client-Info": device.serverFriendlyDescription,
+            "X-Mme-Client-Info": anisette.headers().clientInfo,
             // "X-Apple-I-MD-LU": device.localUserUUID
 
             "User-Agent": applicationInformation.applicationName
@@ -255,7 +268,7 @@ package class AppleAccount {
             ),
             "Request", dict(
                 "A2k", A.pl, // [SRP] A, 2048
-                "cpd", clientProvidedData(applicationInformation, device, adi),
+                "cpd", clientProvidedData(applicationInformation, anisette),
                 "o", "init".pl,
                 "ps", [ // protocols supported
                     "s2k".pl,
@@ -294,7 +307,7 @@ package class AppleAccount {
             "Request", dict(
                 "M1", M1.pl,
                 "c", cookie.pl,
-                "cpd", clientProvidedData(applicationInformation, device, adi),
+                "cpd", clientProvidedData(applicationInformation, anisette),
                 "o", "complete".pl,
                 "u", appleId.pl
             )
@@ -382,7 +395,7 @@ package class AppleAccount {
                     "c", c.pl,
                     "t", idmsToken.pl,
                     "checksum", checksum.pl,
-                    "cpd", clientProvidedData(applicationInformation, device, adi),
+                    "cpd", clientProvidedData(applicationInformation, anisette),
                     "o", "apptokens".pl,
                 )
             );
@@ -418,7 +431,7 @@ package class AppleAccount {
 
             auto token = decryptedToken["t"][applicationInformation.applicationId]["token"].str().native();
 
-            return AppleLoginResponse(new AppleAccount(device, adi, applicationInformation, urls, appleId, adsid, token));
+            return AppleLoginResponse(new AppleAccount(device, adi, anisette, applicationInformation, urls, appleId, adsid, token));
         }
 
         switch (hsc) {
@@ -427,7 +440,7 @@ package class AppleAccount {
                 string identityToken = Base64.encode(cast(ubyte[]) (adsid ~ ":" ~ idmsToken));
                 return nextStepHandler(identityToken, urls, secondaryActionKey, canIgnore).match!(
                     (AppleLoginError error) => AppleLoginResponse(error),
-                    (ReloginNeeded _) => login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt),
+                    (ReloginNeeded _) => login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt, anisette),
                     (Success _) => completeAuthentication(),
                 );
             case 433: /+ anisetteReprovisionRequired +/
@@ -436,6 +449,14 @@ package class AppleAccount {
                         AppleLoginErrorCode.tooManyRetries,
                         format!"Apple keeps requesting Anisette reprovisioning after %d attempts; giving up."(attempt)
                     ));
+                }
+                // When anisette comes from a remote server, the local Android ADI
+                // is not the source of these headers, so reprovisioning it would be
+                // pointless (and the libraries may not even be present). A fresh GET
+                // already yields new values, so just retry.
+                if (cast(LocalAnisetteProvider) anisette is null) {
+                    log.warnF!"Server requested Anisette reprovision (attempt %d) but a remote anisette server is in use; retrying with fresh headers..."(attempt + 1);
+                    return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1, anisette);
                 }
                 log.warnF!"Server requested Anisette reprovision (attempt %d). Wiping and re-provisioning..."(attempt + 1);
                 try {
@@ -449,13 +470,19 @@ package class AppleAccount {
                     ));
                 }
                 log.info("Reprovisioned successfully, retrying login...");
-                return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1);
+                return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1, anisette);
             case 434: /+ anisetteResyncRequired +/
                 if (attempt >= maxLoginRetries) {
                     return AppleLoginResponse(AppleLoginError(
                         AppleLoginErrorCode.tooManyRetries,
                         format!"Apple keeps requesting Anisette resync after %d attempts; giving up."(attempt)
                     ));
+                }
+                // As above: with a remote anisette server the local ADI cannot be
+                // synchronised; a fresh GET provides up-to-date values, so retry.
+                if (cast(LocalAnisetteProvider) anisette is null) {
+                    log.warnF!"Server requested Anisette resync (attempt %d) but a remote anisette server is in use; retrying with fresh headers..."(attempt + 1);
+                    return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1, anisette);
                 }
                 log.warnF!"Server requested Anisette resync (attempt %d). Synchronizing..."(attempt + 1);
                 try {
@@ -469,7 +496,7 @@ package class AppleAccount {
                     ));
                 }
                 log.info("Resynchronized successfully, retrying login...");
-                return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1);
+                return login(applicationInformation, device, adi, appleId, password, nextStepHandler, attempt + 1, anisette);
             case 435: /+ urlSwitchingRequired +/
                 // Apple wants us to retry against a different GSA endpoint. The
                 // exact location of the replacement URL in the response could not
@@ -488,24 +515,24 @@ package class AppleAccount {
         return completeAuthentication();
     }
 
-    private static Plist clientProvidedData(ApplicationInformation applicationInformation, Device device, ADI adi) {
-        auto otp = adi.requestOTP(-2);
+    private static Plist clientProvidedData(ApplicationInformation applicationInformation, AnisetteProvider anisetteProvider) {
+        auto anisette = anisetteProvider.headers();
 
         return dict(
             // Time
-            "X-Apple-I-Client-Time", Clock.currTime(UTC()).stripMilliseconds().toISOExtString().pl,
+            "X-Apple-I-Client-Time", anisette.clientTime.pl,
             // Anisette headers
-            "X-Apple-I-MD", Base64.encode(otp.oneTimePassword).pl,
-            "X-Apple-I-MD-LU", device.localUserUUID.pl,
-            "X-Apple-I-MD-M", Base64.encode(otp.machineIdentifier).pl,
-            "X-Apple-I-MD-RINFO", RINFO.pl,
+            "X-Apple-I-MD", anisette.oneTimePassword.pl,
+            "X-Apple-I-MD-LU", anisette.localUserUUID.pl,
+            "X-Apple-I-MD-M", anisette.machineId.pl,
+            "X-Apple-I-MD-RINFO", anisette.routingInfo.pl,
 
             "X-Apple-I-SRL-NO", "0".pl,
-            "X-Apple-I-TimeZone", Clock.currTime(UTC()).timezone().dstName().pl,
-            "X-Apple-Locale", locale().pl,
+            "X-Apple-I-TimeZone", anisette.timeZone.pl,
+            "X-Apple-Locale", anisette.locale.pl,
 
             // Device UUID
-            "X-Mme-Device-Id", device.uniqueDeviceIdentifier.pl,
+            "X-Mme-Device-Id", anisette.deviceId.pl,
             // Miscellaneous headers took from a real request
             "bootstrap", true.pl,
             // "capp": applicationInformation.applicationName.pl,
@@ -521,8 +548,7 @@ package class AppleAccount {
     package Plist sendRequest(string url, Plist request) {
         auto rq = Request();
 
-        auto otp = adi.requestOTP(-2);
-        auto time = Clock.currTime();
+        auto anisette = anisetteProvider.headers();
 
         // Validate Apple's TLS certificate against the system trust store (MITM-resistant).
         rq.sslSetVerifyPeer(true);
@@ -535,17 +561,17 @@ package class AppleAccount {
             "X-Apple-I-Identity-Id": adsid,
             "X-Apple-GS-Token": token,
 
-            "X-Apple-I-MD-M": Base64.encode(otp.machineIdentifier),
-            "X-Apple-I-MD": Base64.encode(otp.oneTimePassword),
-            "X-Apple-I-MD-LU": device.localUserUUID(),
-            "X-Apple-I-MD-RINFO": RINFO,
+            "X-Apple-I-MD-M": anisette.machineId,
+            "X-Apple-I-MD": anisette.oneTimePassword,
+            "X-Apple-I-MD-LU": anisette.localUserUUID,
+            "X-Apple-I-MD-RINFO": anisette.routingInfo,
 
-            "X-Mme-Device-Id": device.uniqueDeviceIdentifier(),
-            "X-Mme-Client-Info": device.serverFriendlyDescription(),
+            "X-Mme-Device-Id": anisette.deviceId,
+            "X-Mme-Client-Info": anisette.clientInfo,
 
-            "X-Apple-I-Client-Time": time.stripMilliseconds().toISOExtString(),
-            "X-Apple-Locale": locale(),
-            "X-Apple-I-TimeZone": time.timezone.dstName,
+            "X-Apple-I-Client-Time": anisette.clientTime,
+            "X-Apple-Locale": anisette.locale,
+            "X-Apple-I-TimeZone": anisette.timeZone,
         ]);
 
         // Application information
