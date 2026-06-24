@@ -202,6 +202,37 @@ This is compatible with both **anisette-v1** and **anisette-v3** servers (the
 you can self-host. Without `--anisette-server`, Sideloader falls back to local
 emulation by scraping the Apple Music APK as described above.
 
+## Set-it-and-forget-it auto-refresh
+
+Free-developer-account apps stop launching once their ~7-day provisioning profile
+expires, so they have to be re-signed regularly. Instead of keeping a terminal
+open, you can register a background service that periodically runs the refresh
+daemon (`sideloader daemon --once`) for you and shows a native desktop
+notification when it re-signs an app (or when an app is about to expire but no
+device is connected).
+
+```sh
+# Log in once so the daemon has stored credentials, then install the service.
+sideloader login
+sideloader service install                 # default: refresh every 6 hours
+sideloader service install --interval 10800 # or pick your own interval (seconds)
+
+sideloader service status                  # is it installed / loaded?
+sideloader service uninstall               # disable and remove it (idempotent)
+```
+
+The service is per-user and uses the native scheduler of your platform:
+
+- **macOS** — a launchd LaunchAgent at `~/Library/LaunchAgents/dev.dadoum.sideloader.plist`.
+- **Linux** — a systemd *user* service + timer (`sideloader-refresh.{service,timer}`) under `~/.config/systemd/user`.
+- **Windows** — a Task Scheduler task `Sideloader\Refresh`.
+
+Pass `--dry-run`-style overrides for testing via `--unit-dir` (or the
+`SIDELOADER_LAUNCH_AGENTS_DIR` / `SIDELOADER_SYSTEMD_USER_DIR` environment
+variables). Use `service install --no-notify` to suppress desktop notifications.
+Logs from the scheduled daemon are written under the Sideloader config directory
+(`logs/`).
+
 ## Features
 
 - Sideload

@@ -2,7 +2,7 @@ module daemon;
 
 import core.thread : Thread;
 
-import std.datetime : Clock, dur, Duration;
+import std.datetime : Clock, dur, Duration, SysTime;
 import std.stdio;
 
 import slf4d;
@@ -12,6 +12,7 @@ import argparse;
 import imobiledevice;
 
 import app.session : SideloaderSession;
+import app.notifications : notify;
 
 import sideload.refresh;
 
@@ -30,6 +31,9 @@ struct DaemonCommand
 
     @(NamedArgument("threshold").Description("Refresh an app when its expiry is within this many hours (default 48)."))
     uint threshold = 48;
+
+    @(NamedArgument("no-notify").Description("Suppress native desktop notifications about refresh outcomes."))
+    bool noNotify = false;
 
     int opCall()
     {
@@ -85,8 +89,98 @@ struct DaemonCommand
             log.infoF!"%d device(s) connected."(devices.length);
         }
 
-        auto summary = refreshDueApps(session.configurationPath, session, devices, policy, Clock.currTime());
+        auto now = Clock.currTime();
+
+        // Collect per-app notification events as the pass runs, then emit a
+        // tasteful, summarised set of desktop notifications at the end (rather
+        // than one-per-app, which would spam when many apps are due).
+        import app.persistence : InstalledApp;
+        string[] refreshedNames;
+        string[] failedNames;
+        string[] expiringNames; // due-but-no-device, with a days-left hint
+
+        void onResult(ref InstalledApp app, RefreshResult result) {
+            string name = app.appName.length ? app.appName : app.bundleId;
+            final switch (result) {
+                case RefreshResult.refreshed:
+                    refreshedNames ~= name;
+                    break;
+                case RefreshResult.failed:
+                    failedNames ~= name;
+                    break;
+                case RefreshResult.skipped:
+                    // When skipped because no device is connected, warn that the
+                    // app is approaching expiry. We can compute a days-left hint
+                    // from the recorded expiry date.
+                    if (summaryNoDevice) {
+                        expiringNames ~= name ~ expiryHint(app.expiryDate, now);
+                    }
+                    break;
+            }
+        }
+
+        // The only path that reports apps as `skipped` via `onResult` is the
+        // no-device branch, so we can set this up-front: when no device is
+        // connected, every skip is a "due but couldn't refresh" expiry warning.
+        summaryNoDevice = devices.length == 0;
+
+        auto summary = refreshDueApps(session.configurationPath, session, devices, policy, now, &onResult);
         logSummary(summary);
+
+        if (!noNotify)
+            emitNotifications(refreshedNames, failedNames, expiringNames);
+    }
+
+    /// Set just before the refresh pass so the `onResult` closure can tell the
+    /// "no device" case apart without re-reading the summary mid-pass.
+    private bool summaryNoDevice = false;
+
+    /// Builds a " (expires in N days)" suffix from an ISO-8601 expiry date.
+    /// Returns "" when the date is unknown/unparseable.
+    private string expiryHint(string expiryIso, SysTime now) {
+        import std.format : format;
+        if (expiryIso.length == 0)
+            return "";
+        try {
+            auto expiry = SysTime.fromISOExtString(expiryIso);
+            long days = (expiry - now).total!"days";
+            if (days < 0)
+                return " (expired)";
+            return format!" (expires in %d day%s)"(days, days == 1 ? "" : "s");
+        } catch (Exception) {
+            return "";
+        }
+    }
+
+    /// Emits a small, summarised set of desktop notifications for the pass.
+    private void emitNotifications(string[] refreshed, string[] failed, string[] expiring) {
+        import std.array : join;
+        import std.format : format;
+
+        // Refreshed: one line if a couple, summarised if many.
+        if (refreshed.length == 1)
+            notify("Sideloader", format!"Refreshed %s"(refreshed[0]));
+        else if (refreshed.length > 1)
+            notify("Sideloader", format!"Refreshed %d apps: %s"(refreshed.length, summarise(refreshed)));
+
+        if (failed.length == 1)
+            notify("Sideloader: refresh failed", format!"Failed to refresh %s"(failed[0]));
+        else if (failed.length > 1)
+            notify("Sideloader: refresh failed", format!"Failed to refresh %d apps: %s"(failed.length, summarise(failed)));
+
+        if (expiring.length == 1)
+            notify("Sideloader: connect your device", format!"%s — no device connected to refresh."(expiring[0]));
+        else if (expiring.length > 1)
+            notify("Sideloader: connect your device", format!"%d apps need refreshing but no device is connected: %s"(expiring.length, summarise(expiring)));
+    }
+
+    /// Joins up to 3 names, appending "and N more" beyond that, to stay tasteful.
+    private string summarise(string[] names) {
+        import std.array : join;
+        import std.format : format;
+        if (names.length <= 3)
+            return names.join(", ");
+        return names[0 .. 3].join(", ") ~ format!" and %d more"(names.length - 3);
     }
 
     /// Looping mode: repeatedly enumerate devices, refresh, then sleep the poll

@@ -193,6 +193,12 @@ RefreshResult refreshApp(
  * be refined later). Applies a simple exponential backoff between retries up to
  * `policy.maxRetries`. Returns a `RefreshSummary`; with `devices.length == 0` it
  * refreshes nothing and reports `noDevice = true`.
+ *
+ * The optional `onResult` callback is invoked once per due app with that app and
+ * its terminal `RefreshResult`, letting a caller (e.g. the daemon) surface
+ * per-app desktop notifications without re-deriving the due set. When there is
+ * no connected device, it is invoked with `RefreshResult.skipped` for each due
+ * app so callers can warn that those apps will keep ageing toward expiry.
  */
 RefreshSummary refreshDueApps(
     string configPath,
@@ -200,6 +206,7 @@ RefreshSummary refreshDueApps(
     iDevice[] devices,
     RefreshPolicy policy,
     SysTime now,
+    void delegate(ref InstalledApp app, RefreshResult result) onResult = null,
 ) {
     auto log = getLogger();
     RefreshSummary summary;
@@ -219,6 +226,10 @@ RefreshSummary refreshDueApps(
         log.warnF!"%d app(s) are due for refresh, but no device is connected."(due.length);
         summary.noDevice = true;
         summary.skipped += due.length;
+        if (onResult !is null) {
+            foreach (ref app; due)
+                onResult(app, RefreshResult.skipped);
+        }
         return summary;
     }
 
@@ -258,6 +269,9 @@ RefreshSummary refreshDueApps(
                 summary.skipped++;
                 break;
         }
+
+        if (onResult !is null)
+            onResult(app, result);
     }
 
     return summary;
