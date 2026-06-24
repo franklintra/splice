@@ -341,6 +341,43 @@ This functionality is also available through the generic tool runner
 (`sideloader tool list` / `tool run <index>`), which the first-class command
 reuses under the hood.
 
+## Sources (AltStore-style catalogs)
+
+`sideloader source` lets you subscribe to AltStore / SideStore *sources* (JSON
+catalogs of apps) and install apps from them without manually downloading an
+IPA. Subscribed source URLs are persisted in the config directory's `state.json`.
+
+```sh
+# Subscribe to a source (validates that it parses; prints its name + app count).
+sideloader source add https://apps.altstore.io
+
+# List subscribed sources (add --names to also fetch each source's name).
+sideloader source list
+sideloader source list --names
+
+# Browse the apps available in your subscribed sources.
+sideloader source browse
+sideloader source browse --search delta            # filter by name / bundle id
+sideloader source browse --source com.example.repo # limit to one source (id/name/URL)
+
+# Install an app by bundle id: downloads its latest IPA, then signs and installs
+# it like `sideloader install` (honours --team / --udid / --wifi).
+sideloader source install com.rileytestut.Delta
+sideloader source install com.example.app --source https://example.com/repo.json
+
+# Unsubscribe (idempotent).
+sideloader source remove https://apps.altstore.io
+```
+
+Both the legacy single-version source format (top-level `version` /
+`downloadURL`) and the newer `versions` array (newest first) are supported; the
+"latest" version is the first `versions` entry, or the synthesized legacy one.
+`browse` and `list --names` are network-dependent and skip unreachable sources
+with a warning. All sub-commands support the global `--json` flag for scripting.
+
+If a bundle id is offered by several subscribed sources, `source install` uses
+the first match and warns you; pass `--source` to disambiguate.
+
 ## Features
 
 - Sideload

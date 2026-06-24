@@ -142,6 +142,31 @@ struct SideloaderState {
     /// Persisted default Apple account (Apple ID) to log in with when several are
     /// stored in the keyring (empty = no default chosen yet).
     string defaultAccount;
+    /// Subscribed AltStore-style source (catalog) URLs (#17).
+    string[] sources;
+
+    /// Subscribes to a source URL without duplicating it. Returns `true` when it
+    /// was newly added, `false` when already present.
+    bool addSource(string url) {
+        foreach (s; sources) {
+            if (s == url)
+                return false;
+        }
+        sources ~= url;
+        return true;
+    }
+
+    /// Unsubscribes from a source URL. Returns the number removed (0 or more).
+    size_t removeSource(string url) {
+        size_t before = sources.length;
+        string[] kept;
+        foreach (s; sources) {
+            if (s != url)
+                kept ~= s;
+        }
+        sources = kept;
+        return before - sources.length;
+    }
 
     /// Records (or refreshes) an account by Apple ID without duplicating it.
     void upsertAccount(string appleId) {
@@ -185,6 +210,7 @@ struct SideloaderState {
             "anisetteServer": JSONValue(anisetteServer),
             "defaultTeamId": JSONValue(defaultTeamId),
             "defaultAccount": JSONValue(defaultAccount),
+            "sources": JSONValue(sources.map!((s) => JSONValue(s)).array()),
         ]);
     }
 
@@ -197,6 +223,9 @@ struct SideloaderState {
         s.anisetteServer = v.getStr("anisetteServer");
         s.defaultTeamId = v.getStr("defaultTeamId");
         s.defaultAccount = v.getStr("defaultAccount");
+        // Back-compat: a state written before sources existed has no such field,
+        // which simply reads as an empty subscription list.
+        s.sources = v.getStrArray("sources");
         return s;
     }
 }
@@ -443,6 +472,15 @@ private JSONValue[] getArray(JSONValue v, string key) {
     return [];
 }
 
+private string[] getStrArray(JSONValue v, string key) {
+    string[] result;
+    foreach (e; getArray(v, key)) {
+        if (e.type == JSONType.string)
+            result ~= e.str;
+    }
+    return result;
+}
+
 // ---------------------------------------------------------------------------
 // unittests: JSON round-trip
 // ---------------------------------------------------------------------------
@@ -456,6 +494,9 @@ unittest {
     s.anisetteServer = "https://ani.example.com/";
     s.defaultTeamId = "TEAM1";
     s.defaultAccount = "alice@example.com";
+    assert(s.addSource("https://repo.example.com/repo.json"));
+    assert(!s.addSource("https://repo.example.com/repo.json")); // dedup
+    assert(s.addSource("https://other.example.com/repo.json"));
 
     auto json = s.toJSON();
     auto reparsed = SideloaderState.fromJSON(parseJSON(json.toString()));
@@ -463,6 +504,18 @@ unittest {
     assert(reparsed.anisetteServer == "https://ani.example.com/");
     assert(reparsed.defaultTeamId == "TEAM1");
     assert(reparsed.defaultAccount == "alice@example.com");
+    assert(reparsed.sources.length == 2);
+    assert(reparsed.sources[0] == "https://repo.example.com/repo.json");
+    assert(reparsed.sources[1] == "https://other.example.com/repo.json");
+
+    // removeSource is idempotent and reports how many were removed.
+    assert(reparsed.removeSource("https://repo.example.com/repo.json") == 1);
+    assert(reparsed.removeSource("https://repo.example.com/repo.json") == 0);
+    assert(reparsed.sources.length == 1);
+
+    // Back-compat: a state written before `sources` reads as an empty list.
+    auto legacyState = SideloaderState.fromJSON(parseJSON(`{"version": 1}`));
+    assert(legacyState.sources.length == 0);
     assert(reparsed.version_ == stateSchemaVersion);
     assert(reparsed.accounts.length == 1);
     assert(reparsed.accounts[0].appleId == "alice@example.com");
