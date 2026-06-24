@@ -1,0 +1,31 @@
+frontends/cli/dub.json
+  s_2eea0ee1da1f20::t_b0e42747b4c39a 13
+keyring/source/keyring.d
+  s_2eea0ee1da1f20::t_f374cb633d9a0f 21-23,25-35,65-110
+keyring/source/osxkeyring.d
+  s_2eea0ee1da1f20::t_5a0b0dde039b62 7-17,20-71,77-83,86-87,90-94,97-129,134-188,193-240,245-252,254-256
+  s_2eea0ee1da1f20::t_e5ca9e186f9a1b 72-76
+  s_2eea0ee1da1f20::t_9f5d12f4a2b0db 18-19
+  s_2eea0ee1da1f20::t_6323d8d09f0a72 84-85
+keyring/dub.json
+  s_2eea0ee1da1f20::t_e77c0f7cd40843 28-30
+  s_2eea0ee1da1f20::t_272f57d64c8818 37-40
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_fbe8157fda01f7 108-110,138-175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "bc11d714a74a00e2cf0eb79d4759b7ce3e2625f6",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
