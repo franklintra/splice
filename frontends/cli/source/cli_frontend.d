@@ -199,12 +199,11 @@ auto initializeADI(string configurationPath)
 
 // planned commands
 
+import account;
 import app_id;
 import certificate;
 import device;
 import install;
-// @(Command("login").Description("Log-in to your Apple account."))
-// @(Command("logout").Description("Log-out."))
 import sign;
 // @(Command("swift-setup").Description("Set-up certificates to build a Swift Package Manager iOS application (requires SPM in the path)."))
 import team;
@@ -306,6 +305,8 @@ int entryPoint(Commands commands)
                 (CertificateCommand cmd) => cmd(),
                 (DeviceCommand cmd) => cmd(),
                 (InstallCommand cmd) => cmd(),
+                (LoginAccountCommand cmd) => cmd(),
+                (LogoutCommand cmd) => cmd(),
                 (SignCommand cmd) => cmd(),
                 (TrollsignCommand cmd) => cmd(),
                 (TeamCommand cmd) => cmd(),
@@ -330,7 +331,7 @@ struct Commands
     uint threadCount = uint.max;
 
     @SubCommands
-    SumType!(AppIdCommand, CertificateCommand, DeviceCommand, InstallCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, VersionCommand) cmd;
+    SumType!(AppIdCommand, CertificateCommand, DeviceCommand, InstallCommand, LoginAccountCommand, LogoutCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, VersionCommand) cmd;
 }
 
 mixin CLI!Commands.main!entryPoint;
