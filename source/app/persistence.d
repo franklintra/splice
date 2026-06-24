@@ -218,6 +218,10 @@ struct InstalledApp {
     string sourceIpaPath;
     /// Human-readable application name.
     string appName;
+    /// Whether the background refresh daemon (#9) may auto re-sign this app.
+    /// Defaults to `true`; a missing JSON field is treated as `true` for
+    /// backward compatibility with registries written before this flag existed.
+    bool enabled = true;
 
     JSONValue toJSON() const {
         return JSONValue([
@@ -228,6 +232,7 @@ struct InstalledApp {
             "expiryDate": JSONValue(expiryDate),
             "sourceIpaPath": JSONValue(sourceIpaPath),
             "appName": JSONValue(appName),
+            "enabled": JSONValue(enabled),
         ]);
     }
 
@@ -240,6 +245,9 @@ struct InstalledApp {
         a.expiryDate = v.getStr("expiryDate");
         a.sourceIpaPath = v.getStr("sourceIpaPath");
         a.appName = v.getStr("appName");
+        // Back-compat: a registry written before the `enabled` flag existed has
+        // no such field, which must read as "enabled" rather than "disabled".
+        a.enabled = v.getBool("enabled", true);
         return a;
     }
 }
@@ -418,6 +426,15 @@ private int getInt(JSONValue v, string key, int fallback = 0) {
     return fallback;
 }
 
+private bool getBool(JSONValue v, string key, bool fallback = false) {
+    if (v.type != JSONType.object) return fallback;
+    if (auto p = key in v.object) {
+        if (p.type == JSONType.true_) return true;
+        if (p.type == JSONType.false_) return false;
+    }
+    return fallback;
+}
+
 private JSONValue[] getArray(JSONValue v, string key) {
     if (v.type != JSONType.object) return [];
     if (auto p = key in v.object) {
@@ -487,6 +504,25 @@ unittest {
     assert(found.appName == "Example");
     assert(found.expiryDate == "2026-07-01T00:00:00");
     assert(found.sourceIpaPath == "/path/to/app.ipa");
+    assert(found.enabled); // default true survives the round-trip
+
+    // A disabled app round-trips as disabled.
+    auto disabled = InstalledApp(
+        "com.example.disabled", "TEAM1", "fp",
+        "2026-06-24T00:00:00", "2026-07-01T00:00:00",
+        "", "Disabled",
+    );
+    disabled.enabled = false;
+    reg.upsert(disabled);
+    auto reparsed2 = InstalledRegistry.fromJSON(parseJSON(reg.toJSON().toString()));
+    InstalledApp d;
+    assert(reparsed2.query("com.example.disabled", d));
+    assert(!d.enabled);
+
+    // Back-compat: a record without an `enabled` field reads as enabled.
+    auto legacy = InstalledApp.fromJSON(parseJSON(`{"bundleId": "com.legacy.app"}`));
+    assert(legacy.bundleId == "com.legacy.app");
+    assert(legacy.enabled);
 
     InstalledApp missing;
     assert(!reparsed.query("com.does.not.exist", missing));
