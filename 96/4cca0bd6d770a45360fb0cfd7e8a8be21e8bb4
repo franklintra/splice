@@ -1,0 +1,27 @@
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_2593146e68d311 517
+  s_2eea0ee1da1f20::t_c91208917750c3 350
+  s_2eea0ee1da1f20::t_46d13819c46839 485
+frontends/cli/source/sidestore.d
+  s_2eea0ee1da1f20::t_57ab78fef6dea1 118
+  s_2eea0ee1da1f20::t_f7f5360899817a 1-11,14-117,119-232
+  s_2eea0ee1da1f20::t_de178e69eecbeb 12-13
+README.md
+  s_2eea0ee1da1f20::t_e2fd02c0997e1c 236-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "964cca0bd6d770a45360fb0cfd7e8a8be21e8bb4",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
