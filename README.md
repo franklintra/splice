@@ -233,6 +233,37 @@ variables). Use `service install --no-notify` to suppress desktop notifications.
 Logs from the scheduled daemon are written under the Sideloader config directory
 (`logs/`).
 
+## SideStore companion
+
+[SideStore](https://sidestore.io) refreshes your apps *on-device* (no computer
+needed after set-up), but it first needs a pairing file placed inside its app
+container. The `sidestore` command is a first-class companion for that:
+
+```sh
+# Check whether SideStore is installed on the connected device (and its version).
+sideloader sidestore status
+
+# Pair the device and push the pairing file into SideStore in one step.
+sideloader sidestore pair                 # `sidestore setup` is an alias
+sideloader sidestore pair --udid <UDID>   # if several devices are connected
+```
+
+SideStore must already be installed on the device (install it from
+<https://sidestore.io> first) — `sidestore status` / `pair` only detect it and
+hand it the pairing file; they do not install SideStore. Keep the device unlocked
+and trust the computer when prompted; the command waits for you. With no device
+connected it prints a clear message and exits non-zero (it never crashes). Once
+paired, SideStore can re-sign and refresh your apps on-device.
+
+Anisette: SideStore reads its anisette server from its own in-app settings, so it
+cannot be configured from the command line. If you pass `--anisette-server`
+(or have a persisted default), `sidestore pair` prints the URL and reminds you to
+set the same one in SideStore → Settings.
+
+This functionality is also available through the generic tool runner
+(`sideloader tool list` / `tool run <index>`), which the first-class command
+reuses under the hood.
+
 ## Features
 
 - Sideload
