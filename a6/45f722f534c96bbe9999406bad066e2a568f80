@@ -1,0 +1,33 @@
+source/imobiledevice/debugserver.d
+  s_2eea0ee1da1f20::t_e420c4d2dda446 1-243
+source/imobiledevice/package.d
+  s_2eea0ee1da1f20::t_9e0529855abfca 4
+  s_2eea0ee1da1f20::t_66c750e997c575 665-753
+README.md
+  s_2eea0ee1da1f20::t_102883d0e96a08 344-380
+  s_2eea0ee1da1f20::t_77828569af9444 423
+frontends/cli/source/jit.d
+  s_2eea0ee1da1f20::t_e9489bd3cc6962 1-74
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_76186a462978d5 668
+  s_2eea0ee1da1f20::t_8257cc5013ef66 622
+  s_2eea0ee1da1f20::t_421ee82813d48d 447
+source/sideload/jit.d
+  s_2eea0ee1da1f20::t_28caaf68dcbbb1 1-279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "a645f722f534c96bbe9999406bad066e2a568f80",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
