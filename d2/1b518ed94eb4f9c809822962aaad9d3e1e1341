@@ -1,0 +1,32 @@
+frontends/cli/source/cli_frontend.d
+  s_3117f778cfb7b2::t_58f3f035f70a18 267-270
+  s_3117f778cfb7b2::t_a87cf9bf82ad01 49
+  s_3117f778cfb7b2::t_34f32171855153 161-171
+  s_3117f778cfb7b2::t_53ed7155ad22c5 199-213,215-218,220
+source/server/developersession.d
+  s_3117f778cfb7b2::t_e9baefcd6bb431 101-137
+source/server/appleaccount.d
+  s_3117f778cfb7b2::t_5c96c43141eaee 49
+  s_3117f778cfb7b2::t_81a9a9ba32e697 96-106
+keyring/source/keyring.d
+  s_3117f778cfb7b2::t_731fe0592c6b75 207-215
+  s_3117f778cfb7b2::t_ffb34c1c81729a 131-137,142-143,148-149,156,159-164
+  s_3117f778cfb7b2::t_164d302a114a23 258,266-267
+  s_3117f778cfb7b2::t_b98582128c712e 288,290,301-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "d21b518ed94eb4f9c809822962aaad9d3e1e1341",
+  "prompts": {},
+  "sessions": {
+    "s_3117f778cfb7b2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d0b8b952-9314-4487-bdd1-90a63dcb7cd5",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
