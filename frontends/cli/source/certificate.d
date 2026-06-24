@@ -53,7 +53,7 @@ struct ListCerts
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         auto certificates = appleAccount.listAllDevelopmentCerts!iOS(team).unwrap();
 
@@ -93,7 +93,7 @@ struct SubmitCert
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         appleAccount.submitDevelopmentCSR!iOS(team, cast(string) cert.PEM_encode()).unwrap();
 
@@ -122,7 +122,7 @@ struct RevokeCert
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         auto certificates = appleAccount.listAllDevelopmentCerts!iOS(team).unwrap();
         auto matchingCerts = certificates.filter!((cert) => cert.serialNumber == serialNumber).array();

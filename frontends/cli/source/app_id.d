@@ -52,11 +52,25 @@ struct ListAppIds
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         auto appIds = appleAccount.listAppIds!iOS(team).unwrap();
 
         writefln!"You have %d App IDs available out of the %d you have at your disposal."(appIds.availableQuantity, appIds.maxQuantity);
+
+        // Surface when the next App ID slot frees up (the earliest expiration
+        // among the existing App IDs). Especially relevant when the quota is
+        // exhausted, but always informative.
+        if (appIds.appIds.length) {
+            import app.persistence : appIdResetDate;
+            auto resetDate = appIdResetDate(appIds.appIds.map!((appId) => appId.expirationDate).array());
+            if (appIds.availableQuantity == 0) {
+                writefln!"Quota exhausted. The next App ID slot frees up on %s."(resetDate);
+            } else {
+                writefln!"The next App ID slot frees up on %s."(resetDate);
+            }
+        }
+
         writeln("Currently registered App IDs:");
         foreach (appId; appIds.appIds) {
             writefln!" - `%s` for the app `%s`, expiring on %s."(appId.identifier, appId.name, appId.expirationDate);
@@ -90,7 +104,7 @@ struct AddAppId
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         appleAccount.addAppId!iOS(team, identifier, name).unwrap();
 
@@ -121,7 +135,7 @@ struct DeleteAppId
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         auto appIds = appleAccount.listAppIds!iOS(team).unwrap().appIds;
         auto matchingAppIds = appIds.filter!((appId) => appId.identifier == identifier).array();

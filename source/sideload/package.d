@@ -6,6 +6,7 @@ import std.array;
 import std.concurrency;
 import std.conv;
 import std.datetime;
+import std.exception;
 import file = std.file;
 import std.format;
 import std.path;
@@ -33,6 +34,7 @@ void sideloadFull(
     Application app,
     void delegate(double progress, string action) progressCallback,
     bool isMultithreaded = false,
+    string teamId = null,
 ) {
     enum STEP_COUNT = 9.0;
     auto log = getLogger();
@@ -44,9 +46,19 @@ void sideloadFull(
 
     bool isSideStore = app.bundleIdentifier() == "com.SideStore.SideStore";
 
-    // select the first development team
+    // Select the development team. When a `teamId` is supplied (the CLI resolves
+    // it from `--team`, the persisted default or an interactive picker), use the
+    // matching team; otherwise fall back to the first team for backward
+    // compatibility with callers (e.g. the GUIs) that do not pass one yet.
     progressCallback(0 / STEP_COUNT, "Fetching development teams");
-    auto team = developer.listTeams().unwrap()[0]; // TODO add a setting for that
+    auto teams = developer.listTeams().unwrap();
+    enforce(teams.length > 0, "No development team found for this account.");
+    DeveloperTeam team = teams[0];
+    if (teamId !is null) {
+        auto matching = teams.filter!((t) => t.teamId == teamId).array();
+        enforce(matching.length > 0, "No matching team found.");
+        team = matching[0];
+    }
 
     // list development devices from the account
     progressCallback(1 / STEP_COUNT, "List account's development devices");
@@ -93,6 +105,21 @@ void sideloadFull(
     // Search which App IDs have to be registered (we don't want to start registering App IDs if we don't
     // have enough of them to register them all!! otherwise we will waste their precious App IDs)
     auto appIdsToRegister = bundlesWithAppID.filter!((bundle) => !listAppIdResponse.appIds.canFind!((a) => a.identifier == bundle.bundleIdentifier())).array();
+
+    // Surface the App ID quota proactively before registering anything, so the
+    // user knows how many slots they are using and, when slots are exhausted,
+    // when the next one frees up. Existing App IDs are reused (only the missing
+    // ones above are registered), so this never wastes the precious quota.
+    {
+        import persistence = app.persistence;
+        log.infoF!"App ID quota: %d of %d available, %d new App ID(s) to register."(
+            listAppIdResponse.availableQuantity, listAppIdResponse.maxQuantity, appIdsToRegister.length);
+        if (listAppIdResponse.appIds.length) {
+            auto resetDate = persistence.appIdResetDate(
+                listAppIdResponse.appIds.map!((appId) => appId.expirationDate).array());
+            log.infoF!"Next App ID slot frees up on %s."(resetDate.toSimpleString());
+        }
+    }
 
     if (appIdsToRegister.length > listAppIdResponse.availableQuantity) {
         auto minDate = listAppIdResponse.appIds.map!((appId) => appId.expirationDate).minElement();

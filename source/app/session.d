@@ -145,4 +145,53 @@ class SideloaderSession
 
         return teams[0];
     }
+
+    /// Lists the logged-in account's developer teams.
+    /// Requires `developerSession` to be set (call `ensureLoggedIn` first).
+    DeveloperTeam[] listTeams()
+    {
+        assert(developerSession !is null, "listTeams requires a logged-in session");
+        return developerSession.listTeams().unwrap();
+    }
+
+    /**
+     * Resolves a developer team without any interactive prompting, returning the
+     * unambiguous choice and reporting via `ambiguous` when a decision needs the
+     * user.
+     *
+     * Resolution order:
+     *   1. an explicit `teamId` (must match, else throws);
+     *   2. a persisted `defaultTeamId` that still matches an available team;
+     *   3. the single team, when the account has exactly one;
+     *   4. otherwise leave `ambiguous` true and return the available teams in
+     *      `teams` so a frontend can present a picker.
+     *
+     * This keeps all network/policy logic in the core; the interactive picker
+     * (stdin for the CLI, a dialog for the GUIs) lives in the frontend.
+     */
+    DeveloperTeam resolveTeam(string teamId, string defaultTeamId, out bool ambiguous, out DeveloperTeam[] teams)
+    {
+        assert(developerSession !is null, "resolveTeam requires a logged-in session");
+        ambiguous = false;
+        teams = developerSession.listTeams().unwrap();
+
+        if (teamId != null) {
+            auto matching = teams.filter!((elem) => elem.teamId == teamId).array();
+            enforce(matching.length > 0, "No matching team found.");
+            return matching[0];
+        }
+
+        if (defaultTeamId.length) {
+            auto matching = teams.filter!((elem) => elem.teamId == defaultTeamId).array();
+            if (matching.length > 0)
+                return matching[0];
+        }
+
+        enforce(teams.length > 0, "No matching team found.");
+        if (teams.length == 1)
+            return teams[0];
+
+        ambiguous = true;
+        return DeveloperTeam.init;
+    }
 }

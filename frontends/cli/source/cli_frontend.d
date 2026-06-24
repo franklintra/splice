@@ -3,6 +3,7 @@ module cli_frontend;
 import core.stdc.stdlib;
 
 import std.array;
+import std.conv;
 import std.datetime;
 import std.exception;
 import std.format;
@@ -65,6 +66,13 @@ noreturn wrongArgument(string msg) {
  * which has no direct access to the top-level `Commands` struct.
  */
 package string g_anisetteServer = "";
+
+/**
+ * Apple ID selected for this invocation via the global `--account` flag (set in
+ * `entryPoint`). Empty means "use the persisted default account (or the only one
+ * stored)". Consumed by `login`, which has no access to the top-level `Commands`.
+ */
+package string g_selectedAccount = "";
 
 auto openApp(string path) {
     if (!file.exists(path))
@@ -147,21 +155,46 @@ private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, st
 
 DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvider anisetteProvider = null) {
     import keyring;
+    import app.persistence : loadState, saveState;
 
     auto log = getLogger();
 
     log.info("Logging in...");
 
     auto kr = makeKeyring();
+    string configurationPath = systemConfigurationPath();
 
-    // Try to re-use stored credentials so the user isn't re-prompted.
-    string storedAppleId, storedPassword;
-    if (deserializeCredentials(kr.lookup(), storedAppleId, storedPassword)) {
-        log.infoF!"Found stored credentials for %s, logging in silently..."(storedAppleId);
-        if (auto session = attemptLogin(device, adi, storedAppleId, storedPassword, anisetteProvider))
+    // Try to re-use a stored account so the user isn't re-prompted. Multiple
+    // accounts may be stored; pick the one requested via `--account`, otherwise
+    // the persisted default, otherwise the only one stored.
+    StoredAccount[] accounts;
+    string storedDefault;
+    if (deserializeAccounts(kr.lookup(), accounts, storedDefault) && accounts.length) {
+        // `--account` (g_selectedAccount) wins; else the state.json default; else
+        // the blob's own default.
+        string wanted = g_selectedAccount.length ? g_selectedAccount : loadState(configurationPath).defaultAccount;
+        if (wanted.length == 0)
+            wanted = storedDefault;
+
+        auto chosen = pickAccount(accounts, wanted);
+        if (g_selectedAccount.length && chosen.appleId != g_selectedAccount) {
+            log.warnF!"No stored account matches --account %s; using %s instead."(g_selectedAccount, chosen.appleId);
+        }
+
+        log.infoF!"Found stored credentials for %s, logging in silently..."(chosen.appleId);
+        if (auto session = attemptLogin(device, adi, chosen.appleId, chosen.password, anisetteProvider))
             return session;
-        log.warn("Silent login with stored credentials failed; clearing them.");
-        kr.clear();
+        log.warnF!"Silent login with stored credentials for %s failed; removing them."(chosen.appleId);
+
+        // Drop just the failing account, keeping any others.
+        accounts = removeAccount(accounts, chosen.appleId);
+        if (accounts.length) {
+            if (storedDefault == chosen.appleId)
+                storedDefault = accounts[0].appleId;
+            kr.store(serializeAccounts(accounts, storedDefault));
+        } else {
+            kr.clear();
+        }
     }
 
     if (!interactive) {
@@ -178,9 +211,17 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
 
     auto session = attemptLogin(device, adi, appleId, password, anisetteProvider);
     if (session) {
-        // Persist the credentials in the OS secure store so subsequent runs
-        // don't have to prompt again.
-        kr.store(serializeCredentials(appleId, password));
+        // Persist (add/update) this account in the OS secure store and make it the
+        // default, so subsequent runs don't have to prompt again.
+        StoredAccount[] current;
+        string currentDefault;
+        deserializeAccounts(kr.lookup(), current, currentDefault);
+        current = upsertAccount(current, StoredAccount(appleId, password));
+        kr.store(serializeAccounts(current, appleId));
+
+        auto state = loadState(configurationPath);
+        state.defaultAccount = appleId;
+        saveState(configurationPath, state);
     }
     return session;
 }
@@ -229,6 +270,71 @@ string resolveAnisetteServer(string configurationPath)
         return g_anisetteServer;
     }
     return state.anisetteServer;
+}
+
+/**
+ * Resolves which developer team a CLI command should act on.
+ *
+ * Precedence (no prompt unless genuinely ambiguous):
+ *   1. an explicit `--team <teamId>` always wins;
+ *   2. otherwise a persisted `defaultTeamId` from `state.json` that still
+ *      matches an available team is used silently;
+ *   3. otherwise, if the account has exactly one team, it is used silently;
+ *   4. otherwise (several teams, no default) a numbered list is printed and the
+ *      user is prompted on stdin; the choice is persisted as the new default.
+ *
+ * `session` must already be logged in (call `makeSession` first).
+ */
+DeveloperTeam selectTeamInteractive(SideloaderSession session, string teamId)
+{
+    import app.persistence : loadState, saveState;
+
+    auto log = getLogger();
+    auto state = loadState(session.configurationPath);
+
+    bool ambiguous;
+    DeveloperTeam[] teams;
+    auto team = session.resolveTeam(teamId, state.defaultTeamId, ambiguous, teams);
+
+    if (!ambiguous)
+        return team;
+
+    // Several teams and no usable default: present a numbered picker.
+    writeln("You belong to several development teams. Please choose one:");
+    foreach (i, t; teams) {
+        writefln!"  [%d] %s (ID: %s)"(i + 1, t.name, t.teamId);
+    }
+
+    size_t choice;
+    while (true) {
+        write(format!"Enter a number between 1 and %d: "(teams.length));
+        stdout.flush();
+        string line = readln();
+        if (line is null) {
+            // EOF (non-interactive stdin): fall back to the first team without
+            // persisting, so scripted use does not hang.
+            log.warn("No selection provided; defaulting to the first team.");
+            return teams[0];
+        }
+        line = line.chomp();
+        try {
+            choice = line.to!size_t();
+        } catch (Exception) {
+            choice = 0;
+        }
+        if (choice >= 1 && choice <= teams.length)
+            break;
+        writeln("Invalid selection, please try again.");
+    }
+
+    team = teams[choice - 1];
+
+    // Persist the choice as the new default for subsequent runs.
+    state.defaultTeamId = team.teamId;
+    saveState(session.configurationPath, state);
+    log.infoF!"Saved `%s` as your default team."(team.name);
+
+    return team;
 }
 
 // planned commands
@@ -356,6 +462,9 @@ int entryPoint(Commands commands)
     // Surface the chosen anisette server to the (commands-unaware) makeSession path.
     g_anisetteServer = commands.anisetteServer.strip();
 
+    // Surface the chosen stored account to the (commands-unaware) login path.
+    g_selectedAccount = commands.account.strip();
+
     try
     {
         return commands.cmd.match!(
@@ -390,6 +499,9 @@ struct Commands
 
     @(NamedArgument("anisette-server").Description("Use a remote anisette server (anisette-v1/v3 compatible) instead of local emulation. The URL is persisted as the new default."))
     string anisetteServer = "";
+
+    @(NamedArgument("account").Description("Apple ID to use when several accounts are stored (defaults to the saved default account)."))
+    string account = "";
 
     @SubCommands
     SumType!(AppIdCommand, CertificateCommand, DeviceCommand, InstallCommand, LoginAccountCommand, LogoutCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, VersionCommand) cmd;

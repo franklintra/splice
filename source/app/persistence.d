@@ -137,6 +137,11 @@ struct SideloaderState {
     CachedProfile[] profiles;
     /// Persisted default remote anisette server URL (empty = use local emulation).
     string anisetteServer;
+    /// Persisted default developer team id (empty = no default chosen yet).
+    string defaultTeamId;
+    /// Persisted default Apple account (Apple ID) to log in with when several are
+    /// stored in the keyring (empty = no default chosen yet).
+    string defaultAccount;
 
     /// Records (or refreshes) an account by Apple ID without duplicating it.
     void upsertAccount(string appleId) {
@@ -178,6 +183,8 @@ struct SideloaderState {
             "certificates": JSONValue(certificates.map!((c) => c.toJSON()).array()),
             "profiles": JSONValue(profiles.map!((p) => p.toJSON()).array()),
             "anisetteServer": JSONValue(anisetteServer),
+            "defaultTeamId": JSONValue(defaultTeamId),
+            "defaultAccount": JSONValue(defaultAccount),
         ]);
     }
 
@@ -188,6 +195,8 @@ struct SideloaderState {
         s.certificates = v.getArray("certificates").map!((e) => CachedCertificate.fromJSON(e)).array();
         s.profiles = v.getArray("profiles").map!((e) => CachedProfile.fromJSON(e)).array();
         s.anisetteServer = v.getStr("anisetteServer");
+        s.defaultTeamId = v.getStr("defaultTeamId");
+        s.defaultAccount = v.getStr("defaultAccount");
         return s;
     }
 }
@@ -354,6 +363,41 @@ private void saveJSONFile(string path, JSONValue value) {
 }
 
 // ---------------------------------------------------------------------------
+// App ID quota helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the earliest `expirationDate` among the given App IDs — i.e. when the
+ * next App ID slot frees up for a quota-limited (free) account.
+ *
+ * Pure and offline so it can be unit-tested without contacting Apple. Returns
+ * `DateTime.init` when the list is empty (caller should treat that as "unknown").
+ */
+DateTime appIdResetDate(const(DateTime)[] expirationDates) {
+    DateTime earliest = DateTime.init;
+    bool found = false;
+    foreach (d; expirationDates) {
+        if (!found || d < earliest) {
+            earliest = d;
+            found = true;
+        }
+    }
+    return earliest;
+}
+
+unittest {
+    // Empty -> DateTime.init.
+    assert(appIdResetDate([]) == DateTime.init);
+
+    // Picks the earliest expiration.
+    auto a = DateTime(2026, 7, 10, 0, 0, 0);
+    auto b = DateTime(2026, 7, 1, 0, 0, 0);
+    auto c = DateTime(2026, 7, 20, 0, 0, 0);
+    assert(appIdResetDate([a, b, c]) == b);
+    assert(appIdResetDate([b]) == b);
+}
+
+// ---------------------------------------------------------------------------
 // JSON helpers: tolerant accessors (missing/wrong-typed fields -> defaults)
 // ---------------------------------------------------------------------------
 
@@ -393,11 +437,15 @@ unittest {
     s.upsertCertificate(CachedCertificate("TEAM1", "CERTID", "abc123", "certs/TEAM1/cert.pem"));
     s.upsertProfile(CachedProfile("com.example.app", "TEAM1", "PPID", "name", "2026-07-01T00:00:00"));
     s.anisetteServer = "https://ani.example.com/";
+    s.defaultTeamId = "TEAM1";
+    s.defaultAccount = "alice@example.com";
 
     auto json = s.toJSON();
     auto reparsed = SideloaderState.fromJSON(parseJSON(json.toString()));
 
     assert(reparsed.anisetteServer == "https://ani.example.com/");
+    assert(reparsed.defaultTeamId == "TEAM1");
+    assert(reparsed.defaultAccount == "alice@example.com");
     assert(reparsed.version_ == stateSchemaVersion);
     assert(reparsed.accounts.length == 1);
     assert(reparsed.accounts[0].appleId == "alice@example.com");

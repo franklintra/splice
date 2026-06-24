@@ -21,6 +21,9 @@ struct InstallCommand
     @(PositionalArgument(0, "app path").Description("The path of the IPA file to sideload."))
     string appPath;
 
+    @(NamedArgument("team").Description("Team ID (if your account belongs to several teams)."))
+    string teamId = null;
+
     @(NamedArgument("udid").Description("UDID of the device (if multiple are available)."))
     string udid = null;
 
@@ -39,6 +42,11 @@ struct InstallCommand
         }
         string configurationPath = session.configurationPath;
         auto appleAccount = session.developerSession;
+
+        // Resolve the team up-front (honours --team, the persisted default or an
+        // interactive picker) and hand its id to sideloadFull so multi-team users
+        // are not silently bound to the first team.
+        auto team = selectTeamInteractive(session, teamId);
 
         auto devices = iDevice.deviceList();
         string udid = this.udid;
@@ -65,7 +73,7 @@ struct InstallCommand
             message = action;
             progressBar.index = cast(int) (progress * 100);
             progressBar.update();
-        }, !singlethreaded);
+        }, !singlethreaded, team.teamId);
         progressBar.finish();
 
         return 0;

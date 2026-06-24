@@ -53,7 +53,7 @@ struct ListDevices
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         auto devices = appleAccount.listDevices!iOS(team).unwrap();
 
@@ -91,7 +91,7 @@ struct AddDevice
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         auto devices = appleAccount.addDevice!iOS(team, name, udid).unwrap();
         log.info("Success!");
@@ -121,7 +121,7 @@ struct DeleteDevice
         }
         auto appleAccount = session.developerSession;
 
-        auto team = session.selectTeam(teamId);
+        auto team = selectTeamInteractive(session, teamId);
 
         auto devices = appleAccount.deleteDevice!iOS(team, deviceId).unwrap();
         log.info("Success!");
