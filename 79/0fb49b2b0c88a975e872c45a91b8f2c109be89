@@ -1,0 +1,19 @@
+dub.json
+  s_6b94219a70f3ed::t_9d0ae990437b75 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "790fb49b2b0c88a975e872c45a91b8f2c109be89",
+  "prompts": {},
+  "sessions": {
+    "s_6b94219a70f3ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed599eaf-75d0-4def-8001-795d28bc84e1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
