@@ -450,7 +450,7 @@ import sign;
 // @(Command("swift-setup").Description("Set-up certificates to build a Swift Package Manager iOS application (requires SPM in the path)."))
 import team;
 import tool;
-// @(Command("tweak").Description("Install a tweak in an ipa file."))
+import tweak;
 
 mixin template LoginCommand()
 {
@@ -627,6 +627,7 @@ int entryPoint(Commands commands)
                 (TrollsignCommand cmd) => cmd(),
                 (TeamCommand cmd) => cmd(),
                 (ToolCommand cmd) => cmd(),
+                (TweakCommand cmd) => cmd(),
                 (UninstallCommand cmd) => cmd(),
                 (VersionCommand cmd) => cmd(),
         );
@@ -660,7 +661,7 @@ struct Commands
     string account = "";
 
     @SubCommands
-    SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, ListCommand, LoginAccountCommand, LogoutCommand, RefreshCommand, ServiceCommand, SideStoreCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, UninstallCommand, VersionCommand) cmd;
+    SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, ListCommand, LoginAccountCommand, LogoutCommand, RefreshCommand, ServiceCommand, SideStoreCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, TweakCommand, UninstallCommand, VersionCommand) cmd;
 }
 
 mixin CLI!Commands.main!entryPoint;

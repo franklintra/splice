@@ -48,6 +48,7 @@ Available commands:
   trollsign      Bypass Core-Trust with TrollStore 2's method (CVE-2023-41991).
   team           Manage teams.
   tool           Run Sideloader's tools.
+  tweak          Inject tweaks (.dylib or .deb) into an IPA before signing.
   version        Print the version.
 
 Optional arguments:
@@ -63,6 +64,7 @@ Table of Contents
 
   * [How to install](#how-to-install)
   * [How to use the CLI to install](#how-to-use-the-CLI-to-install)
+  * [Tweak injection](#tweak-injection)
   * [How do I build it myself?](#how-do-i-build-it-myself)
     * [OpenSUSE Tumbleweed](#opensuse-tumbleweed)
     * [Other distributions](#other-distributions)
@@ -137,6 +139,54 @@ To enable Wi-Fi sync, connect the device once over USB, trust the computer, then
 turn on "Show this iPhone when on Wi-Fi" (Finder on macOS) / "Sync with this
 iPhone over Wi-Fi" (iTunes on Windows). After that first pairing, the cable is
 no longer needed for the commands above.
+
+## Tweak injection
+
+`sideloader tweak` patches an IPA so it loads one or more tweaks (extra dylibs)
+on launch, *before* the app is signed — so the injected dylibs get signed
+together with the rest of the bundle.
+
+```sh
+# Write a patched IPA (defaults to ./<name>-tweaked.ipa)
+sideloader tweak App.ipa --inject MyTweak.dylib
+sideloader tweak App.ipa --inject MyTweak.dylib --output Patched.ipa
+
+# Inject several tweaks at once (.dylib and/or .deb), repeating --inject
+sideloader tweak App.ipa --inject A.dylib --inject some-tweak.deb
+
+# Sign the tweaked app and install it straight onto a connected device
+sideloader tweak App.ipa --inject MyTweak.dylib --install
+```
+
+How it works:
+
+* For a **`.dylib`**, the file is copied into `<App>.app/Frameworks/` and an
+  `LC_LOAD_DYLIB` load command pointing at
+  `@executable_path/Frameworks/<name>.dylib` is inserted into the app's main
+  executable (resolved from `CFBundleExecutable`). Every architecture slice of a
+  fat executable is patched.
+* For a **`.deb`** (a Cydia/Procursus-style package — an `ar` archive containing
+  `control.tar.*`/`data.tar.*`), the package is extracted with the system `ar`
+  and `tar`, every `.dylib` found inside `data.tar` (e.g. under
+  `/Library/MobileSubstrate/DynamicLibraries/`) is bundled into `Frameworks/`
+  and injected just like a standalone dylib.
+* With `--output` the tweaked bundle is repackaged into a new IPA. With
+  `--install` it is signed and installed like `sideloader install` (honours
+  `--team`, `--udid`, `--wifi`, `--singlethread`). If neither is given, a
+  `./<name>-tweaked.ipa` is written.
+
+Notes / limitations:
+
+* The injection requires free space in the executable's Mach-O header (the
+  padding between the load commands and the first section). Most app binaries
+  have ample padding; if a binary does not, the command fails loudly instead of
+  producing a corrupt executable.
+* Many `.deb` tweaks are *substrate-based*: they expect a hooking runtime
+  (CydiaSubstrate / ElleKit) to be present at runtime. Sideloader does **not**
+  vendor a substrate runtime — when an injected dylib links against one that is
+  not bundled, it logs a warning. Getting such a tweak to actually load at
+  runtime requires that runtime to be available on the device; plain dylibs that
+  do not depend on a substrate load without extra setup.
 
 ## How do I build it myself?
 

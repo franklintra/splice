@@ -233,6 +233,99 @@ class MachO {
         return true;
     }
 
+    /**
+     * Computes the lowest file offset occupied by actual section data, i.e. the
+     * first byte after the header + load commands that belongs to a section.
+     *
+     * The free region between the end of the load commands
+     * (`headersize + sizeofcmds`) and this offset is the "header padding" we can
+     * grow the load-command area into when injecting a new command. Segments
+     * with no sections (e.g. __PAGEZERO, __LINKEDIT) or zero-offset sections are
+     * ignored, as their `fileoff` of 0 does not constrain header growth.
+     */
+    private size_t firstSectionFileOffset() {
+        size_t lowest = size_t.max;
+
+        foreach (command; commands) {
+            if (command.cmd == LC_SEGMENT_64) {
+                auto segmentCmd = cast(segment_command_64*) command;
+                auto sections = (cast(section_64*) (cast(ubyte*) command + segment_command_64.sizeof))[0..segmentCmd.nsects];
+                foreach (ref sect; sections) {
+                    if (sect.offset != 0 && sect.offset < lowest) {
+                        lowest = sect.offset;
+                    }
+                }
+            } else if (command.cmd == LC_SEGMENT) {
+                auto segmentCmd = cast(segment_command*) command;
+                auto sections = (cast(section*) (cast(ubyte*) command + segment_command.sizeof))[0..segmentCmd.nsects];
+                foreach (ref sect; sections) {
+                    if (sect.offset != 0 && sect.offset < lowest) {
+                        lowest = sect.offset;
+                    }
+                }
+            }
+        }
+
+        return lowest;
+    }
+
+    /**
+     * Inserts an `LC_LOAD_DYLIB` load command into this Mach-O slice, making the
+     * binary depend on `dylibPath` (the classic insert_dylib technique).
+     *
+     * The new command is a `dylib_command` immediately followed by the
+     * NUL-terminated `dylibPath`, the whole thing padded to an 8-byte boundary.
+     * The install name is typically `@executable_path/Frameworks/<name>.dylib`
+     * or an `@rpath`-relative path.
+     *
+     * It is written in the free header padding between the end of the existing
+     * load commands and the first section's file data. If there is not enough
+     * padding it does NOT touch the binary and throws a `MachOInjectException`
+     * (most app binaries have ample padding). On success the in-memory `data`
+     * buffer and the header (`ncmds`/`sizeofcmds`) are updated; retrieve the
+     * patched bytes via `makeMachO`/the `data` field.
+     */
+    void addLoadDylib(string dylibPath) {
+        import core.stdc.string : memcpy, memset;
+
+        // dylib_command + NUL-terminated path, padded up to an 8-byte boundary.
+        size_t rawSize = dylib_command.sizeof + dylibPath.length + 1;
+        size_t newCmdSize = (rawSize + 7) & ~cast(size_t) 7;
+
+        size_t endCommandsLocation = headersize + sizeofcmds;
+        size_t firstSection = firstSectionFileOffset();
+        // Fall back to the __TEXT segment base if no sections were found.
+        if (firstSection == size_t.max) {
+            firstSection = cast(size_t) execSegBase;
+        }
+
+        if (endCommandsLocation + newCmdSize > firstSection) {
+            throw new MachOInjectException(format!(
+                "not enough header space to inject `%s` (need %d bytes, have %d free)")(
+                dylibPath, newCmdSize, firstSection > endCommandsLocation ? firstSection - endCommandsLocation : 0));
+        }
+
+        // Zero the destination region first, then lay down the command struct and
+        // the path string. The padding bytes after the string stay zero.
+        ubyte* dest = data[endCommandsLocation..$].ptr;
+        memset(dest, 0, newCmdSize);
+
+        auto dylibCmd = cast(dylib_command*) dest;
+        dylibCmd.cmd = LC_LOAD_DYLIB;
+        dylibCmd.cmdsize = cast(uint) newCmdSize;
+        dylibCmd.dylib_.name.offset = cast(uint) dylib_command.sizeof;
+        dylibCmd.dylib_.timestamp = 0;
+        dylibCmd.dylib_.current_version = 0x10000; // 1.0.0
+        dylibCmd.dylib_.compatibility_version = 0x10000; // 1.0.0
+
+        memcpy(dest + dylib_command.sizeof, dylibPath.ptr, dylibPath.length);
+
+        commands ~= cast(load_command*) dylibCmd;
+        sizeofcmds += cast(uint) newCmdSize;
+        ncmds += 1;
+        updateHeader();
+    }
+
     void updateHeader() {
         if (cputype & CPU_ARCH_ABI64) {
             auto header = cast(mach_header_64*) data.ptr;
@@ -1117,4 +1210,84 @@ class InvalidMachOException: Exception {
     this(string issue, string filename = __FILE__, size_t line = __LINE__) {
         super(format!"The executable cannot be loaded: %s"(issue), filename, line);
     }
+}
+
+class MachOInjectException: Exception {
+    this(string issue, string filename = __FILE__, size_t line = __LINE__) {
+        super(format!"Cannot inject a load command: %s"(issue), filename, line);
+    }
+}
+
+// Builds a minimal in-memory arm64 Mach-O with a __TEXT segment containing one
+// section, leaving header padding before the section data. Used to exercise
+// addLoadDylib's success and failure paths without an external binary (the real
+// otool round-trip lives in the issue #16 test harness).
+version (unittest) private ubyte[] buildMinimalMachO(uint headerPadBytes) {
+    enum sectionDataLen = 16;
+    size_t loadCmdsSize = segment_command_64.sizeof + section_64.sizeof;
+    size_t sectionOffset = mach_header_64.sizeof + loadCmdsSize + headerPadBytes;
+    size_t total = sectionOffset + sectionDataLen;
+
+    auto data = new ubyte[](total);
+
+    auto header = cast(mach_header_64*) data.ptr;
+    header.magic = MH_MAGIC_64;
+    header.cputype = CPU_TYPE_ARM64;
+    header.cpusubtype = 0;
+    header.filetype = MH_EXECUTE;
+    header.ncmds = 1;
+    header.sizeofcmds = cast(uint) loadCmdsSize;
+    header.flags = 0;
+
+    auto seg = cast(segment_command_64*) (data.ptr + mach_header_64.sizeof);
+    seg.cmd = LC_SEGMENT_64;
+    seg.cmdsize = cast(uint) loadCmdsSize;
+    seg.segname[0..6] = cast(char[]) "__TEXT";
+    seg.fileoff = 0;
+    seg.filesize = total;
+    seg.nsects = 1;
+
+    auto sect = cast(section_64*) (data.ptr + mach_header_64.sizeof + segment_command_64.sizeof);
+    sect.sectname[0..5] = cast(char[]) "__tex";
+    sect.segname[0..6] = cast(char[]) "__TEXT";
+    sect.offset = cast(uint) sectionOffset;
+    sect.size = sectionDataLen;
+
+    return data;
+}
+
+unittest {
+    // Ample header padding: injection succeeds and is visible on re-parse.
+    auto data = buildMinimalMachO(256);
+    auto machO = MachO.parse(data)[0];
+    auto prevNcmds = machO.ncmds;
+    machO.addLoadDylib("@executable_path/Frameworks/libtest.dylib");
+    assert(machO.ncmds == prevNcmds + 1);
+
+    auto reparsed = MachO.parse(makeMachO([machO]))[0];
+    assert(reparsed.ncmds == prevNcmds + 1);
+
+    bool found = false;
+    foreach (cmd; reparsed.commands) {
+        if (cmd.cmd == LC_LOAD_DYLIB) {
+            auto dl = cast(dylib_command*) cmd;
+            // cmdsize must be 8-byte aligned.
+            assert(dl.cmdsize % 8 == 0);
+            auto name = cast(char*) cmd + dl.dylib_.name.offset;
+            import core.stdc.string : strcmp;
+            if (strcmp(name, "@executable_path/Frameworks/libtest.dylib") == 0)
+                found = true;
+        }
+    }
+    assert(found, "Injected LC_LOAD_DYLIB not found after re-parsing");
+}
+
+unittest {
+    // No header padding: injection must fail loudly without corrupting the data.
+    import std.exception : assertThrown;
+    auto data = buildMinimalMachO(0);
+    auto machO = MachO.parse(data)[0];
+    auto before = data.dup;
+    assertThrown!MachOInjectException(machO.addLoadDylib("@executable_path/x.dylib"));
+    assert(data == before, "Failed injection must not modify the binary");
 }
