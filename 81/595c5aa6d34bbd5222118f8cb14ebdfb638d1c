@@ -1,0 +1,19 @@
+source/version_string.d
+  s_48c46507a92178::t_d6b454f58deb50 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "81595c5aa6d34bbd5222118f8cb14ebdfb638d1c",
+  "prompts": {},
+  "sessions": {
+    "s_48c46507a92178": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23bd772b-c296-496f-8727-f05414d3e460",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
