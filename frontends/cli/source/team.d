@@ -39,17 +39,11 @@ struct ListTeams
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
         writeln("Teams:");
         auto teams = appleAccount.listTeams().unwrap();

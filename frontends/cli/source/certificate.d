@@ -47,27 +47,13 @@ struct ListCerts
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         auto certificates = appleAccount.listAllDevelopmentCerts!iOS(team).unwrap();
 
@@ -101,27 +87,13 @@ struct SubmitCert
 
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         appleAccount.submitDevelopmentCSR!iOS(team, cast(string) cert.PEM_encode()).unwrap();
 
@@ -144,27 +116,13 @@ struct RevokeCert
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         auto certificates = appleAccount.listAllDevelopmentCerts!iOS(team).unwrap();
         auto matchingCerts = certificates.filter!((cert) => cert.serialNumber == serialNumber).array();

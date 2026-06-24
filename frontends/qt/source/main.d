@@ -3,9 +3,6 @@ module main;
 import core.runtime;
 import core.stdc.signal;
 
-import file = std.file;
-import std.path;
-import std.process;
 import std.traits;
 
 import qt.core.coreapplication;
@@ -17,6 +14,8 @@ import qt.widgets.application;
 import slf4d;
 import slf4d.default_provider;
 import slf4d.provider;
+
+import app.session : systemConfigurationPath;
 
 import constants;
 import utils;
@@ -48,16 +47,9 @@ int main(string[] args) {
     }
     configureLoggingProvider(loggingProvider);
 
-    version (Windows) {
-        string configurationPath = environment["AppData"];
-    } else version (OSX) {
-        string configurationPath = "~/Library/Preferences/".expandTilde();
-    } else {
-        string configurationPath = environment.get("XDG_CONFIG_DIR")
-        .orDefault("~/.config")
-        .expandTilde();
-    }
-    configurationPath = configurationPath.buildPath(applicationName);
+    // Resolved via the shared core helper (single source of truth, also honours
+    // the SIDELOADER_CONFIG_DIR override).
+    string configurationPath = systemConfigurationPath();
 
     auto log = getLogger();
 

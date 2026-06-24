@@ -46,27 +46,13 @@ struct ListAppIds
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         auto appIds = appleAccount.listAppIds!iOS(team).unwrap();
 
@@ -98,27 +84,13 @@ struct AddAppId
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         appleAccount.addAppId!iOS(team, identifier, name).unwrap();
 
@@ -143,26 +115,13 @@ struct DeleteAppId
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         auto appIds = appleAccount.listAppIds!iOS(team).unwrap().appIds;
         auto matchingAppIds = appIds.filter!((appId) => appId.identifier == identifier).array();
@@ -199,18 +158,15 @@ struct DownloadProvision
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
+        // NOTE: this command historically used the message "No matching team
+        // found" (no trailing period), so it keeps the inline filter rather than
+        // session.selectTeam (which standardises on "No matching team found.").
         auto teams = appleAccount.listTeams().unwrap();
 
         string teamId = this.teamId;

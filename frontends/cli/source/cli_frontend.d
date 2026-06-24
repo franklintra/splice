@@ -42,9 +42,15 @@ import sideload.sign;
 import argparse;
 
 import app;
+import app.session;
 import utils;
 
 version = X509;
+
+// Re-exported from the core so existing CLI code can keep importing them from
+// `cli_frontend`. The single source of truth lives in `app.session`.
+alias systemConfigurationPath = app.session.systemConfigurationPath;
+alias defaultConfigurationPath = app.session.defaultConfigurationPath;
 
 noreturn wrongArgument(string msg) {
     getLogger().error(msg);
@@ -170,25 +176,6 @@ auto initializeADI(string configurationPath)
     return provisioningData;
 }
 
-string systemConfigurationPath()
-{
-    return environment.get("SIDELOADER_CONFIG_DIR").orDefault(defaultConfigurationPath());
-}
-
-string defaultConfigurationPath()
-{
-    version (Windows) {
-        string configurationPath = environment["AppData"];
-    } else version (OSX) {
-        string configurationPath = "~/Library/Preferences/".expandTilde();
-    } else {
-        string configurationPath = environment.get("XDG_CONFIG_DIR")
-            .orDefault("~/.config")
-            .expandTilde();
-    }
-    return configurationPath.buildPath("Sideloader");
-}
-
 // planned commands
 
 import app_id;
@@ -206,10 +193,30 @@ import tool;
 mixin template LoginCommand()
 {
     import provision;
+    import app.session : SideloaderSession;
     @(NamedArgument("i", "interactive").Description("Prompt to type passwords if needed."))
     bool interactive = false;
 
     final auto login(Device device, ADI adi) => cli_frontend.login(device, adi, interactive);
+
+    /**
+     * Builds a `SideloaderSession` with the resolved configuration path and the
+     * provisioned device/adi (downloading the ADI native libraries first if
+     * needed, via the CLI `initializeADI`), then logs in using the interactive
+     * CLI login strategy.
+     *
+     * Returns the session on success, or `null` when login failed (the caller
+     * should `return 1`).
+     */
+    final SideloaderSession makeSession()
+    {
+        string configurationPath = systemConfigurationPath();
+        scope provisioningData = initializeADI(configurationPath);
+        auto session = new SideloaderSession(configurationPath, provisioningData);
+        if (!session.ensureLoggedIn((device, adi) => login(device, adi)))
+            return null;
+        return session;
+    }
 }
 
 @(Command("version").Description("Print the version."))

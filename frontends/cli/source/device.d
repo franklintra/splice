@@ -47,27 +47,13 @@ struct ListDevices
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         auto devices = appleAccount.listDevices!iOS(team).unwrap();
 
@@ -99,27 +85,13 @@ struct AddDevice
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         auto devices = appleAccount.addDevice!iOS(team, name, udid).unwrap();
         log.info("Success!");
@@ -143,27 +115,13 @@ struct DeleteDevice
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = session.selectTeam(teamId);
 
         auto devices = appleAccount.deleteDevice!iOS(team, deviceId).unwrap();
         log.info("Success!");
