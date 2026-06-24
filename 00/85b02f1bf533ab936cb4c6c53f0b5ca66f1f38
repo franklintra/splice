@@ -1,0 +1,39 @@
+source/server/appleaccount.d
+  s_2eea0ee1da1f20::t_87e67274800f98 45-47
+  s_2eea0ee1da1f20::t_8cb7e2e1eda78d 430,434-452,454-472,474-484
+  s_2eea0ee1da1f20::t_15498935010b5f 124-125
+  s_2eea0ee1da1f20::t_b89908785d216d 219-220
+  s_2eea0ee1da1f20::t_89d94f17821615 527-528
+  s_2eea0ee1da1f20::t_60d628941505c7 204-211
+source/imobiledevice/package.d
+  s_2eea0ee1da1f20::t_22f31a4db1cbcf 317,322
+  s_2eea0ee1da1f20::t_e0d0d8678cce24 139
+  s_2eea0ee1da1f20::t_4db16933c354b7 112
+  s_2eea0ee1da1f20::t_d1a4b297791457 127
+  s_2eea0ee1da1f20::t_4ad3dfb293ddb6 236,241
+  s_2eea0ee1da1f20::t_dae1270109f71d 197
+  s_2eea0ee1da1f20::t_0e5255121141b0 298
+  s_2eea0ee1da1f20::t_a59b4979bef3e4 35-43
+source/sideload/application.d
+  s_2eea0ee1da1f20::t_e823d6e012f8d9 31-34
+  s_2eea0ee1da1f20::t_fce8722e3121b0 69-85
+  s_2eea0ee1da1f20::t_ce3cedda302a72 10
+source/sideload/package.d
+  s_2eea0ee1da1f20::t_40e17e99f2a45a 40-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "0085b02f1bf533ab936cb4c6c53f0b5ca66f1f38",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
