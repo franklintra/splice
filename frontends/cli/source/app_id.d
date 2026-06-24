@@ -13,9 +13,12 @@ import slf4d.default_provider;
 
 import argparse;
 
+import std.json : JSONValue;
+
 import server.developersession;
 
 import cli_frontend;
+import jsonout;
 
 @(Command("app-id").Description("Manage App IDs."))
 struct AppIdCommand
@@ -46,31 +49,56 @@ struct ListAppIds
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = selectTeamInteractive(session, teamId);
 
         auto appIds = appleAccount.listAppIds!iOS(team).unwrap();
 
+        if (g_jsonOutput) {
+            import app.persistence : appIdResetDate;
+
+            JSONValue[] arr;
+            foreach (appId; appIds.appIds) {
+                arr ~= JSONValue([
+                    "identifier":      JSONValue(appId.identifier),
+                    "name":            JSONValue(appId.name),
+                    "expirationDate":  JSONValue(appId.expirationDate.toISOExtString()),
+                ]);
+            }
+
+            JSONValue[string] obj = [
+                "maxQuantity":       JSONValue(appIds.maxQuantity),
+                "availableQuantity": JSONValue(appIds.availableQuantity),
+                "appIds":            JSONValue(arr),
+            ];
+            if (appIds.appIds.length) {
+                auto resetDate = appIdResetDate(appIds.appIds.map!((appId) => appId.expirationDate).array());
+                obj["nextSlotFreesUp"] = JSONValue(resetDate.toISOExtString());
+            }
+            printJson(JSONValue(obj));
+            return 0;
+        }
+
         writefln!"You have %d App IDs available out of the %d you have at your disposal."(appIds.availableQuantity, appIds.maxQuantity);
+
+        // Surface when the next App ID slot frees up (the earliest expiration
+        // among the existing App IDs). Especially relevant when the quota is
+        // exhausted, but always informative.
+        if (appIds.appIds.length) {
+            import app.persistence : appIdResetDate;
+            auto resetDate = appIdResetDate(appIds.appIds.map!((appId) => appId.expirationDate).array());
+            if (appIds.availableQuantity == 0) {
+                writefln!"Quota exhausted. The next App ID slot frees up on %s."(resetDate);
+            } else {
+                writefln!"The next App ID slot frees up on %s."(resetDate);
+            }
+        }
+
         writeln("Currently registered App IDs:");
         foreach (appId; appIds.appIds) {
             writefln!" - `%s` for the app `%s`, expiring on %s."(appId.identifier, appId.name, appId.expirationDate);
@@ -98,27 +126,13 @@ struct AddAppId
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = selectTeamInteractive(session, teamId);
 
         appleAccount.addAppId!iOS(team, identifier, name).unwrap();
 
@@ -143,26 +157,13 @@ struct DeleteAppId
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = selectTeamInteractive(session, teamId);
 
         auto appIds = appleAccount.listAppIds!iOS(team).unwrap().appIds;
         auto matchingAppIds = appIds.filter!((appId) => appId.identifier == identifier).array();
@@ -199,18 +200,15 @@ struct DownloadProvision
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
+        // NOTE: this command historically used the message "No matching team
+        // found" (no trailing period), so it keeps the inline filter rather than
+        // session.selectTeam (which standardises on "No matching team found.").
         auto teams = appleAccount.listTeams().unwrap();
 
         string teamId = this.teamId;

@@ -3,6 +3,7 @@ module cli_frontend;
 import core.stdc.stdlib;
 
 import std.array;
+import std.conv;
 import std.datetime;
 import std.exception;
 import std.format;
@@ -29,6 +30,7 @@ import provision;
 
 import imobiledevice;
 
+import server.anisette;
 import server.appleaccount;
 import server.developersession;
 import version_string;
@@ -42,14 +44,36 @@ import sideload.sign;
 import argparse;
 
 import app;
+import app.session;
+import jsonout;
 import utils;
 
 version = X509;
+
+// Re-exported from the core so existing CLI code can keep importing them from
+// `cli_frontend`. The single source of truth lives in `app.session`.
+alias systemConfigurationPath = app.session.systemConfigurationPath;
+alias defaultConfigurationPath = app.session.defaultConfigurationPath;
 
 noreturn wrongArgument(string msg) {
     getLogger().error(msg);
     exit(1);
 }
+
+/**
+ * Remote anisette server URL selected for this invocation, resolved in
+ * `entryPoint` from the `--anisette-server` flag (falling back to the persisted
+ * default). Empty means "use local emulation". It is consumed by `makeSession`,
+ * which has no direct access to the top-level `Commands` struct.
+ */
+package string g_anisetteServer = "";
+
+/**
+ * Apple ID selected for this invocation via the global `--account` flag (set in
+ * `entryPoint`). Empty means "use the persisted default account (or the only one
+ * stored)". Consumed by `login`, which has no access to the top-level `Commands`.
+ */
+package string g_selectedAccount = "";
 
 auto openApp(string path) {
     if (!file.exists(path))
@@ -99,29 +123,12 @@ string readPasswordLine(string prompt) {
     }
 }
 
-DeveloperSession login(Device device, ADI adi, bool interactive) {
+/// Attempts an Apple login with the given credentials, wiring the interactive
+/// 2FA prompt. Returns the session on success, or `null` on failure; on failure
+/// `errorOut` carries Apple's error so the caller can tell a definitive
+/// credential rejection apart from a transient/recoverable failure.
+private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, string password, out AppleLoginError errorOut, AnisetteProvider anisetteProvider = null) {
     auto log = getLogger();
-
-    log.info("Logging in...");
-
-    DeveloperSession account;
-
-    // TODO Keyring stuff
-    // ...
-
-    if (account) return null;
-    if (!interactive) {
-        log.error("You are not logged in. (use `sidestore login` to log-in, or add `-i` to make us ask you the account)");
-        return null;
-    }
-
-    log.info("Please enter your account informations. They will only be sent to Apple servers.");
-    log.info("See it for yourself at https://github.com/Dadoum/Sideloader/");
-
-    write("Apple ID: ");
-    string appleId = readln().chomp();
-    string password = readPasswordLine("Password: ");
-
     return DeveloperSession.login(
         device,
         adi,
@@ -138,14 +145,109 @@ DeveloperSession login(Device device, ADI adi, bool interactive) {
                     continue;
                 }
             } while (submitCode(code).match!((Success _) => false, (ReloginNeeded _) => false, (AppleLoginError _) => true));
-        })
+        },
+        anisetteProvider)
     .match!(
         (DeveloperSession session) => session,
         (AppleLoginError error) {
             log.errorF!"Can't log-in! %s (%d)"(error.description, error);
+            errorOut = error;
             return null;
         }
     );
+}
+
+DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvider anisetteProvider = null) {
+    import keyring;
+    import app.persistence : loadState, saveState;
+
+    auto log = getLogger();
+
+    log.info("Logging in...");
+
+    auto kr = makeKeyring();
+    string configurationPath = systemConfigurationPath();
+
+    // Try to re-use a stored account so the user isn't re-prompted. Multiple
+    // accounts may be stored; pick the one requested via `--account`, otherwise
+    // the persisted default, otherwise the only one stored.
+    StoredAccount[] accounts;
+    string storedDefault;
+    if (deserializeAccounts(kr.lookup(), accounts, storedDefault) && accounts.length) {
+        // `--account` (g_selectedAccount) wins; else the state.json default; else
+        // the blob's own default.
+        string wanted = g_selectedAccount.length ? g_selectedAccount : loadState(configurationPath).defaultAccount;
+        if (wanted.length == 0)
+            wanted = storedDefault;
+
+        auto chosen = pickAccount(accounts, wanted);
+        if (g_selectedAccount.length && chosen.appleId != g_selectedAccount) {
+            log.warnF!"No stored account matches --account %s; using %s instead."(g_selectedAccount, chosen.appleId);
+        }
+
+        log.infoF!"Found stored credentials for %s, logging in silently..."(chosen.appleId);
+        AppleLoginError silentError;
+        if (auto session = attemptLogin(device, adi, chosen.appleId, chosen.password, silentError, anisetteProvider))
+            return session;
+
+        // Only discard stored credentials when Apple definitively rejects them
+        // (the saved password is wrong). Transient or externally-recoverable
+        // failures — anisette/network hiccups, rate-limiting, a locked account,
+        // server-side errors — leave the saved password valid, so keep it:
+        // purging would force a needless interactive 2FA re-login and, under an
+        // unattended `daemon`/`service`, silently break auto-refresh forever.
+        if (silentError.code == AppleLoginErrorCode.invalidPassword) {
+            log.warnF!"Stored credentials for %s were rejected by Apple; removing them."(chosen.appleId);
+
+            // Drop just the failing account, keeping any others.
+            accounts = removeAccount(accounts, chosen.appleId);
+            if (accounts.length) {
+                if (storedDefault == chosen.appleId)
+                    storedDefault = accounts[0].appleId;
+                kr.store(serializeAccounts(accounts, storedDefault));
+            } else {
+                kr.clear();
+            }
+        } else {
+            log.warnF!"Silent login for %s failed (%s); keeping stored credentials to retry later."(chosen.appleId, silentError.description);
+            // Don't fall through to an interactive prompt for a transient failure:
+            // re-prompting can't fix a network/anisette/rate-limit problem, and an
+            // unattended run has no one to answer. Surface the failure instead.
+            if (!interactive) {
+                log.error("Could not log in with stored credentials (transient failure). Try again later.");
+                return null;
+            }
+        }
+    }
+
+    if (!interactive) {
+        log.error("You are not logged in. (use `sidestore login` to log-in, or add `-i` to make us ask you the account)");
+        return null;
+    }
+
+    log.info("Please enter your account informations. They will only be sent to Apple servers.");
+    log.info("See it for yourself at https://github.com/Dadoum/Sideloader/");
+
+    write("Apple ID: ");
+    string appleId = readln().chomp();
+    string password = readPasswordLine("Password: ");
+
+    AppleLoginError interactiveError;
+    auto session = attemptLogin(device, adi, appleId, password, interactiveError, anisetteProvider);
+    if (session) {
+        // Persist (add/update) this account in the OS secure store and make it the
+        // default, so subsequent runs don't have to prompt again.
+        StoredAccount[] current;
+        string currentDefault;
+        deserializeAccounts(kr.lookup(), current, currentDefault);
+        current = upsertAccount(current, StoredAccount(appleId, password));
+        kr.store(serializeAccounts(current, appleId));
+
+        auto state = loadState(configurationPath);
+        state.defaultAccount = appleId;
+        saveState(configurationPath, state);
+    }
+    return session;
 }
 
 auto initializeADI(string configurationPath)
@@ -170,51 +272,270 @@ auto initializeADI(string configurationPath)
     return provisioningData;
 }
 
-string systemConfigurationPath()
+/**
+ * Resolves the remote anisette server URL for this invocation.
+ *
+ * Precedence: the `--anisette-server` flag (`g_anisetteServer`, set in
+ * `entryPoint`) wins and is persisted as the new default; otherwise the persisted
+ * default from `state.json` is used; if neither is set, returns empty (meaning
+ * "use local emulation").
+ */
+string resolveAnisetteServer(string configurationPath)
 {
-    return environment.get("SIDELOADER_CONFIG_DIR").orDefault(defaultConfigurationPath());
+    import app.persistence : loadState, saveState;
+
+    auto state = loadState(configurationPath);
+    if (g_anisetteServer.length) {
+        // Explicit flag: use it and persist it as the new default.
+        if (state.anisetteServer != g_anisetteServer) {
+            state.anisetteServer = g_anisetteServer;
+            saveState(configurationPath, state);
+        }
+        return g_anisetteServer;
+    }
+    return state.anisetteServer;
 }
 
-string defaultConfigurationPath()
+/**
+ * Resolves which developer team a CLI command should act on.
+ *
+ * Precedence (no prompt unless genuinely ambiguous):
+ *   1. an explicit `--team <teamId>` always wins;
+ *   2. otherwise a persisted `defaultTeamId` from `state.json` that still
+ *      matches an available team is used silently;
+ *   3. otherwise, if the account has exactly one team, it is used silently;
+ *   4. otherwise (several teams, no default) a numbered list is printed and the
+ *      user is prompted on stdin; the choice is persisted as the new default.
+ *
+ * `session` must already be logged in (call `makeSession` first).
+ */
+DeveloperTeam selectTeamInteractive(SideloaderSession session, string teamId)
 {
-    version (Windows) {
-        string configurationPath = environment["AppData"];
-    } else version (OSX) {
-        string configurationPath = "~/Library/Preferences/".expandTilde();
-    } else {
-        string configurationPath = environment.get("XDG_CONFIG_DIR")
-            .orDefault("~/.config")
-            .expandTilde();
+    import app.persistence : loadState, saveState;
+
+    auto log = getLogger();
+    auto state = loadState(session.configurationPath);
+
+    bool ambiguous;
+    DeveloperTeam[] teams;
+    auto team = session.resolveTeam(teamId, state.defaultTeamId, ambiguous, teams);
+
+    if (!ambiguous)
+        return team;
+
+    // Several teams and no usable default: present a numbered picker.
+    writeln("You belong to several development teams. Please choose one:");
+    foreach (i, t; teams) {
+        writefln!"  [%d] %s (ID: %s)"(i + 1, t.name, t.teamId);
     }
-    return configurationPath.buildPath("Sideloader");
+
+    size_t choice;
+    while (true) {
+        write(format!"Enter a number between 1 and %d: "(teams.length));
+        stdout.flush();
+        string line = readln();
+        if (line is null) {
+            // EOF (non-interactive stdin): fall back to the first team without
+            // persisting, so scripted use does not hang.
+            log.warn("No selection provided; defaulting to the first team.");
+            return teams[0];
+        }
+        line = line.chomp();
+        try {
+            choice = line.to!size_t();
+        } catch (Exception) {
+            choice = 0;
+        }
+        if (choice >= 1 && choice <= teams.length)
+            break;
+        writeln("Invalid selection, please try again.");
+    }
+
+    team = teams[choice - 1];
+
+    // Persist the choice as the new default for subsequent runs.
+    state.defaultTeamId = team.teamId;
+    saveState(session.configurationPath, state);
+    log.infoF!"Saved `%s` as your default team."(team.name);
+
+    return team;
+}
+
+/**
+ * Shared connected-device selection for the CLI (issue #13).
+ *
+ * Enumerates `iDevice.deviceList()`, DEDUPS a device that appears on both USB
+ * and the network into one logical entry, then selects the one to act on
+ * honouring an explicit `--udid` and a `--wifi`/`--prefer-network` opt-in.
+ *
+ * On success returns the connected `iDevice` (opened with the chosen transport
+ * preference) and fills `chosenUdid`/`transportLabel`, logging which transport
+ * the command is using (e.g. "Connecting to <udid> over Wi-Fi"). On "no device"
+ * or "ambiguous" it logs the appropriate guidance and returns `null` (the caller
+ * should `return 1`). Never throws on the no-device path.
+ *
+ * `preferNetwork` mirrors a command's `--wifi`/`--prefer-network` flag.
+ */
+iDevice selectConnectedDevice(string requestedUdid, bool preferNetwork,
+        out string chosenUdid, out string transportLabel)
+{
+    auto log = getLogger();
+
+    iDeviceInfo[] rawList;
+    try {
+        rawList = iDevice.deviceList();
+    } catch (Exception ex) {
+        log.errorF!"Could not enumerate connected devices: %s"(ex.msg);
+        return null;
+    }
+
+    auto devices = dedupDevices(rawList);
+    auto preference = preferNetwork
+        ? TransportPreference.preferNetwork
+        : TransportPreference.preferUsb;
+    auto selection = selectDevice(devices, requestedUdid, preference);
+
+    final switch (selection.status) {
+        case DeviceSelectionStatus.noDevice:
+            if (requestedUdid.length)
+                log.errorF!"No connected device matches UDID `%s` (over USB or Wi-Fi)."(requestedUdid);
+            else
+                log.error("No device connected (neither over USB nor Wi-Fi).");
+            return null;
+        case DeviceSelectionStatus.ambiguous:
+            log.error("Multiple devices are connected. Please select one with --udid.");
+            return null;
+        case DeviceSelectionStatus.selected:
+            break;
+    }
+
+    chosenUdid = selection.device.udid;
+    transportLabel = selection.device.transportLabel;
+
+    string transportWord = selection.connType == iDeviceConnectionType.network ? "Wi-Fi" : "USB";
+    log.infoF!"Connecting to %s over %s (reachable via %s)."(
+        chosenUdid, transportWord, transportLabel);
+
+    bool useNetwork = selection.connType == iDeviceConnectionType.network;
+    return new iDevice(chosenUdid,
+        useNetwork ? TransportPreference.preferNetwork : TransportPreference.preferUsb);
+}
+
+/**
+ * Convenience for commands that only need the resolved UDID (and don't open the
+ * device through `selectConnectedDevice`). Same dedup/selection/logging as
+ * above, returning the chosen udid or `null` (with guidance logged).
+ */
+string selectConnectedUdid(string requestedUdid, bool preferNetwork = false)
+{
+    auto log = getLogger();
+
+    iDeviceInfo[] rawList;
+    try {
+        rawList = iDevice.deviceList();
+    } catch (Exception ex) {
+        log.errorF!"Could not enumerate connected devices: %s"(ex.msg);
+        return null;
+    }
+
+    auto preference = preferNetwork
+        ? TransportPreference.preferNetwork
+        : TransportPreference.preferUsb;
+    auto selection = selectDevice(dedupDevices(rawList), requestedUdid, preference);
+
+    final switch (selection.status) {
+        case DeviceSelectionStatus.noDevice:
+            if (requestedUdid.length)
+                log.errorF!"No connected device matches UDID `%s` (over USB or Wi-Fi)."(requestedUdid);
+            else
+                log.error("No device connected (neither over USB nor Wi-Fi).");
+            return null;
+        case DeviceSelectionStatus.ambiguous:
+            log.error("Multiple devices are connected. Please select one with --udid.");
+            return null;
+        case DeviceSelectionStatus.selected:
+            return selection.device.udid;
+    }
 }
 
 // planned commands
 
+import account;
 import app_id;
+import apps;
 import certificate;
+import daemon;
 import device;
 import install;
-// @(Command("login").Description("Log-in to your Apple account."))
-// @(Command("logout").Description("Log-out."))
+import jit;
+import service;
+import sidestore;
 import sign;
+import sources;
 // @(Command("swift-setup").Description("Set-up certificates to build a Swift Package Manager iOS application (requires SPM in the path)."))
 import team;
 import tool;
-// @(Command("tweak").Description("Install a tweak in an ipa file."))
+import trollstore;
+import tweak;
 
 mixin template LoginCommand()
 {
     import provision;
+    import server.anisette : AnisetteProvider, RemoteAnisetteProvider;
+    static import app;
+    import app.session : SideloaderSession;
     @(NamedArgument("i", "interactive").Description("Prompt to type passwords if needed."))
     bool interactive = false;
 
-    final auto login(Device device, ADI adi) => cli_frontend.login(device, adi, interactive);
+    final auto login(Device device, ADI adi, AnisetteProvider anisetteProvider) =>
+        cli_frontend.login(device, adi, interactive, anisetteProvider);
+
+    /**
+     * Builds a `SideloaderSession` with the resolved configuration path, then logs
+     * in using the interactive CLI login strategy.
+     *
+     * Anisette headers come from a remote anisette server when one is configured
+     * (`--anisette-server` or the persisted default); in that case we skip the
+     * Android ADI native-library download and machine provisioning entirely, only
+     * creating the local `Device` identity. Otherwise we fall back to local
+     * emulation (downloading the libraries and provisioning ADI as before).
+     *
+     * Returns the session on success, or `null` when login failed (the caller
+     * should `return 1`).
+     */
+    final SideloaderSession makeSession()
+    {
+        string configurationPath = systemConfigurationPath();
+        string anisetteServer = resolveAnisetteServer(configurationPath);
+
+        if (anisetteServer.length) {
+            getLogger().infoF!"Using remote anisette server: %s"(anisetteServer);
+            // Remote anisette: no Android libraries / ADI provisioning needed.
+            auto device = app.initializeDevice(configurationPath);
+            auto provider = cast(AnisetteProvider) new RemoteAnisetteProvider(anisetteServer);
+            auto session = new SideloaderSession(configurationPath);
+            session.device = device;
+            session.developerSession = login(device, null, provider);
+            return session.developerSession ? session : null;
+        }
+
+        // Local emulation path (unchanged): download libs + provision ADI.
+        scope provisioningData = initializeADI(configurationPath);
+        auto session = new SideloaderSession(configurationPath, provisioningData);
+        if (!session.ensureLoggedIn((device, adi) => login(device, adi, null)))
+            return null;
+        return session;
+    }
 }
 
 @(Command("version").Description("Print the version."))
 struct VersionCommand {
     int opCall() {
+        if (g_jsonOutput) {
+            import std.json : JSONValue;
+            printJson(JSONValue(["version": JSONValue(versionStr)]));
+            return 0;
+        }
         writeln(versionStr);
         return 0;
     }
@@ -257,6 +578,28 @@ int reExecWithHomebrewLibs()
     }
 }
 
+/**
+ * Resolves the effective slf4d log level for this invocation.
+ *
+ * Precedence: an explicit `--log-level <trace|debug|info|warn|error>` wins;
+ * otherwise `-d/--debug` maps to TRACE; otherwise INFO. An unrecognised
+ * `--log-level` value falls back to the debug/INFO behaviour (a warning is not
+ * logged here because the provider isn't configured yet).
+ */
+Level resolveLogLevel(string logLevel, bool debug_)
+{
+    switch (logLevel.strip().toLower())
+    {
+        case "trace": return Levels.TRACE;
+        case "debug": return Levels.DEBUG;
+        case "info":  return Levels.INFO;
+        case "warn":  return Levels.WARN;
+        case "error": return Levels.ERROR;
+        case "":      return debug_ ? Levels.TRACE : Levels.INFO;
+        default:      return debug_ ? Levels.TRACE : Levels.INFO;
+    }
+}
+
 int entryPoint(Commands commands)
 {
     int shimExitCode = reExecWithHomebrewLibs();
@@ -269,19 +612,52 @@ int entryPoint(Commands commands)
     }
 
     defaultPoolThreads = commands.threadCount;
-    configureLoggingProvider(new shared DefaultProvider(true, commands.debug_ ? Levels.TRACE : Levels.INFO));
+
+    // Resolve the effective log level: an explicit `--log-level` wins, then
+    // `-d/--debug` (TRACE), otherwise INFO.
+    Level rootLevel = resolveLogLevel(commands.logLevel, commands.debug_);
+
+    // Surface the `--json` flag to commands (mirrors g_anisetteServer below).
+    g_jsonOutput = commands.json;
+
+    if (commands.json) {
+        // In --json mode stdout is reserved for the JSON document, so route ALL
+        // log levels (incl. INFO/DEBUG/TRACE, which the default handler sends to
+        // stdout) to stderr instead. Logs stay visible for debugging.
+        configureLoggingProvider(makeStderrProvider(rootLevel));
+    } else {
+        configureLoggingProvider(new shared DefaultProvider(true, rootLevel));
+    }
+
+    // Surface the chosen anisette server to the (commands-unaware) makeSession path.
+    g_anisetteServer = commands.anisetteServer.strip();
+
+    // Surface the chosen stored account to the (commands-unaware) login path.
+    g_selectedAccount = commands.account.strip();
 
     try
     {
         return commands.cmd.match!(
                 (AppIdCommand cmd) => cmd(),
                 (CertificateCommand cmd) => cmd(),
+                (DaemonCommand cmd) => cmd(),
                 (DeviceCommand cmd) => cmd(),
                 (InstallCommand cmd) => cmd(),
+                (JITCommand cmd) => cmd(),
+                (ListCommand cmd) => cmd(),
+                (LoginAccountCommand cmd) => cmd(),
+                (LogoutCommand cmd) => cmd(),
+                (RefreshCommand cmd) => cmd(),
+                (ServiceCommand cmd) => cmd(),
+                (SideStoreCommand cmd) => cmd(),
                 (SignCommand cmd) => cmd(),
+                (SourceCommand cmd) => cmd(),
                 (TrollsignCommand cmd) => cmd(),
+                (TrollStoreCommand cmd) => cmd(),
                 (TeamCommand cmd) => cmd(),
                 (ToolCommand cmd) => cmd(),
+                (TweakCommand cmd) => cmd(),
+                (UninstallCommand cmd) => cmd(),
                 (VersionCommand cmd) => cmd(),
         );
     }
@@ -298,11 +674,23 @@ struct Commands
     @(NamedArgument("d", "debug").Description("Enable debug logging"))
     bool debug_;
 
+    @(NamedArgument("json").Description("Emit machine-readable JSON to stdout (logs go to stderr)."))
+    bool json;
+
+    @(NamedArgument("log-level").Description("Log level: trace|debug|info|warn|error (overrides --debug; default info)."))
+    string logLevel = "";
+
     @(NamedArgument("thread-count").Description("Numbers of threads to be used for signing the application bundle"))
     uint threadCount = uint.max;
 
+    @(NamedArgument("anisette-server").Description("Use a remote anisette server (anisette-v1/v3 compatible) instead of local emulation. The URL is persisted as the new default."))
+    string anisetteServer = "";
+
+    @(NamedArgument("account").Description("Apple ID to use when several accounts are stored (defaults to the saved default account)."))
+    string account = "";
+
     @SubCommands
-    SumType!(AppIdCommand, CertificateCommand, DeviceCommand, InstallCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, VersionCommand) cmd;
+    SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, JITCommand, ListCommand, LoginAccountCommand, LogoutCommand, RefreshCommand, ServiceCommand, SideStoreCommand, SignCommand, SourceCommand, TrollsignCommand, TrollStoreCommand, TeamCommand, ToolCommand, TweakCommand, UninstallCommand, VersionCommand) cmd;
 }
 
 mixin CLI!Commands.main!entryPoint;

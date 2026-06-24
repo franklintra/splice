@@ -6,6 +6,7 @@ import std.array;
 import std.concurrency;
 import std.conv;
 import std.datetime;
+import std.exception;
 import file = std.file;
 import std.format;
 import std.path;
@@ -33,15 +34,32 @@ void sideloadFull(
     Application app,
     void delegate(double progress, string action) progressCallback,
     bool isMultithreaded = false,
+    string teamId = null,
+    bool permanent = false,
 ) {
     enum STEP_COUNT = 9.0;
     auto log = getLogger();
 
+    // Remove the IPA extraction temp dir once we are completely done (signing and
+    // transfer both read from it, so this only runs after the whole flow exits,
+    // success or failure). Non-fatal by construction (cleanup() swallows errors).
+    scope(exit) app.cleanup();
+
     bool isSideStore = app.bundleIdentifier() == "com.SideStore.SideStore";
 
-    // select the first development team
+    // Select the development team. When a `teamId` is supplied (the CLI resolves
+    // it from `--team`, the persisted default or an interactive picker), use the
+    // matching team; otherwise fall back to the first team for backward
+    // compatibility with callers (e.g. the GUIs) that do not pass one yet.
     progressCallback(0 / STEP_COUNT, "Fetching development teams");
-    auto team = developer.listTeams().unwrap()[0]; // TODO add a setting for that
+    auto teams = developer.listTeams().unwrap();
+    enforce(teams.length > 0, "No development team found for this account.");
+    DeveloperTeam team = teams[0];
+    if (teamId !is null) {
+        auto matching = teams.filter!((t) => t.teamId == teamId).array();
+        enforce(matching.length > 0, "No matching team found.");
+        team = matching[0];
+    }
 
     // list development devices from the account
     progressCallback(1 / STEP_COUNT, "List account's development devices");
@@ -88,6 +106,21 @@ void sideloadFull(
     // Search which App IDs have to be registered (we don't want to start registering App IDs if we don't
     // have enough of them to register them all!! otherwise we will waste their precious App IDs)
     auto appIdsToRegister = bundlesWithAppID.filter!((bundle) => !listAppIdResponse.appIds.canFind!((a) => a.identifier == bundle.bundleIdentifier())).array();
+
+    // Surface the App ID quota proactively before registering anything, so the
+    // user knows how many slots they are using and, when slots are exhausted,
+    // when the next one frees up. Existing App IDs are reused (only the missing
+    // ones above are registered), so this never wastes the precious quota.
+    {
+        import persistence = app.persistence;
+        log.infoF!"App ID quota: %d of %d available, %d new App ID(s) to register."(
+            listAppIdResponse.availableQuantity, listAppIdResponse.maxQuantity, appIdsToRegister.length);
+        if (listAppIdResponse.appIds.length) {
+            auto resetDate = persistence.appIdResetDate(
+                listAppIdResponse.appIds.map!((appId) => appId.expirationDate).array());
+            log.infoF!"Next App ID slot frees up on %s."(resetDate.toSimpleString());
+        }
+    }
 
     if (appIdsToRegister.length > listAppIdResponse.availableQuantity) {
         auto minDate = listAppIdResponse.appIds.map!((appId) => appId.expirationDate).minElement();
@@ -143,6 +176,16 @@ void sideloadFull(
     progressCallback(7 / STEP_COUNT, "Signing the application bundle");
     double accumulator = 0;
     sign(app, certIdentity, provisioningProfiles, (progress) => progressCallback((7 + (accumulator += progress)) / STEP_COUNT, "Signing the application bundle"));
+
+    // Permanent (TrollStore-style) install: after the normal dev-cert signing,
+    // re-stamp every Mach-O in the bundle with the CoreTrust bypass (#19). This
+    // makes the binaries pass on-device validation even after the 7-day dev
+    // profile would otherwise expire. The caller (CLI `install --permanent`) has
+    // already verified the device is on a vulnerable iOS version.
+    if (permanent) {
+        progressCallback(7 / STEP_COUNT, "Applying the CoreTrust bypass (permanent install)");
+        applyCoreTrustBypass(app);
+    }
 
     // connect to the device's installation daemon and send to it the signed app
     double progress = 8 / STEP_COUNT;
@@ -238,7 +281,96 @@ void sideloadFull(
             (typeof(null)) {}
     );
 
+    // Record the successful install in the persistent registry so a later run
+    // knows which apps are installed and when each expires, without contacting
+    // Apple. Non-fatal: a registry failure must never fail the install.
+    try {
+        import std.datetime : Clock;
+        import persistence = app.persistence;
+
+        auto registry = persistence.loadInstalledRegistry(configurationPath);
+        auto record = persistence.InstalledApp(
+            mainAppBundleId,
+            team.teamId,
+            certIdentity.publicKeyFingerprint(),
+            Clock.currTime().toISOExtString(),
+            // A permanent (CoreTrust-bypass) install never expires, so record an
+            // empty expiry; the refresh daemon also keys off `permanent` directly.
+            permanent ? "" : mainAppId.expirationDate.toISOExtString(),
+            app.sourcePath,
+            mainAppName,
+        );
+        record.permanent = permanent;
+        registry.upsert(record);
+        persistence.saveInstalledRegistry(configurationPath, registry);
+
+        // Also remember the account + cert/profile metadata in state.json.
+        auto state = persistence.loadState(configurationPath);
+        state.upsertAccount(developer.appleId);
+        state.upsertCertificate(persistence.CachedCertificate(
+            team.teamId,
+            "",
+            certIdentity.publicKeyFingerprint(),
+            buildPath("certs", team.teamId, "cert.pem"),
+        ));
+        if (auto mainProfile = mainAppIdStr in provisioningProfiles) {
+            state.upsertProfile(persistence.CachedProfile(
+                mainAppBundleId,
+                team.teamId,
+                mainProfile.provisioningProfileId,
+                mainProfile.name,
+                mainAppId.expirationDate.toISOExtString(),
+            ));
+        }
+        persistence.saveState(configurationPath, state);
+    } catch (Exception e) {
+        log.warnF!"Could not record install in the persistence layer: %s"(e.msg);
+    }
+
     progressCallback(1.0, "Done!");
+}
+
+/**
+ * Re-stamps every Mach-O executable in the bundle with the TrollStore 2 CoreTrust
+ * bypass (CVE-2023-41991), so the app passes on-device signature validation
+ * without a (renewable) development provisioning profile (#19).
+ *
+ * Runs AFTER the normal `sign` pass: the bypass replaces the code-signature blob
+ * produced by signing. It patches the main app executable and each sub-bundle's
+ * executable (frameworks / app extensions), mirroring what `sideloader trollsign`
+ * does for a single Mach-O. Only the device's main image needs it strictly, but
+ * patching the whole bundle keeps every embedded binary self-consistent.
+ *
+ * Caller responsibility: this must only be used on a device whose iOS version is
+ * within the vulnerable range (`sideload.coretrust.isCoreTrustBypassable`).
+ */
+private void applyCoreTrustBypass(Application app) {
+    import sideload.bundle : Bundle;
+    import sideload.ct_bypass : bypassCoreTrust;
+    import sideload.macho : MachO, makeMachO;
+
+    auto log = getLogger();
+
+    void patchBundle(Bundle bundle) {
+        if (auto execEntry = "CFBundleExecutable" in bundle.appInfo) {
+            string executableName = execEntry.str().native();
+            string executablePath = bundle.bundleDir.buildPath(executableName);
+            if (file.exists(executablePath)) {
+                MachO[] machOs = MachO.parse(cast(ubyte[]) file.read(executablePath));
+                foreach (ref machO; machOs) {
+                    machO.bypassCoreTrust();
+                }
+                file.write(executablePath, makeMachO(machOs));
+                log.debugF!"Applied CoreTrust bypass to `%s`."(executableName);
+            }
+        }
+
+        foreach (sub; bundle.subBundles()) {
+            patchBundle(sub);
+        }
+    }
+
+    patchBundle(app);
 }
 
 class NoAppIdRemainingException: Exception {

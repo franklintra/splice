@@ -15,9 +15,12 @@ import botan.filters.data_src;
 
 import argparse;
 
+import std.json : JSONValue;
+
 import server.developersession;
 
 import cli_frontend;
+import jsonout;
 
 @(Command("device").Description("Manage registered devices."))
 struct DeviceCommand
@@ -47,29 +50,28 @@ struct ListDevices
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = selectTeamInteractive(session, teamId);
 
         auto devices = appleAccount.listDevices!iOS(team).unwrap();
+
+        if (g_jsonOutput) {
+            JSONValue[] arr;
+            foreach (device; devices) {
+                arr ~= JSONValue([
+                    "name": JSONValue(device.name),
+                    "udid": JSONValue(device.deviceNumber),
+                    "id":   JSONValue(device.deviceId),
+                ]);
+            }
+            printJson(JSONValue(["devices": JSONValue(arr)]));
+            return 0;
+        }
 
         writefln!"You have %d devices registered."(devices.length);
         writeln("Currently registered devices:");
@@ -99,27 +101,13 @@ struct AddDevice
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = selectTeamInteractive(session, teamId);
 
         auto devices = appleAccount.addDevice!iOS(team, name, udid).unwrap();
         log.info("Success!");
@@ -143,27 +131,13 @@ struct DeleteDevice
     {
         auto log = getLogger();
 
-        string configurationPath = systemConfigurationPath();
-
-        scope provisioningData = initializeADI(configurationPath);
-        scope adi = provisioningData.adi;
-        scope akDevice = provisioningData.device;
-
-        auto appleAccount = login(akDevice, adi);
-
-        if (!appleAccount) {
+        auto session = makeSession();
+        if (!session) {
             return 1;
         }
+        auto appleAccount = session.developerSession;
 
-        auto teams = appleAccount.listTeams().unwrap();
-
-        string teamId = this.teamId;
-        if (teamId != null) {
-            teams = teams.filter!((elem) => elem.teamId == teamId).array();
-        }
-        enforce(teams.length > 0, "No matching team found.");
-
-        auto team = teams[0];
+        auto team = selectTeamInteractive(session, teamId);
 
         auto devices = appleAccount.deleteDevice!iOS(team, deviceId).unwrap();
         log.info("Success!");

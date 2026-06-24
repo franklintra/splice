@@ -24,6 +24,7 @@ import server.developersession;
 import sideload;
 
 import ui.authentication.authenticationassistant;
+import ui.manageinstalledappswindow;
 import ui.sideloadprogresswindow;
 import ui.sideloadergtkapplication;
 import ui.toolselectionwindow;
@@ -61,6 +62,13 @@ class DeviceWidget: PreferencesGroup {
             installApplicationRow.addOnActivated((_) => selectApplication());
             phoneExpander.addRow(installApplicationRow);
 
+            ActionRow manageInstalledAppsRow = new ActionRow();
+            manageInstalledAppsRow.setTitle("Manage installed apps");
+            manageInstalledAppsRow.setIconName("view-list-symbolic");
+            manageInstalledAppsRow.setActivatable(true);
+            manageInstalledAppsRow.addOnActivated((_) => showManageInstalledApps(device));
+            phoneExpander.addRow(manageInstalledAppsRow);
+
             ActionRow additionalToolsRow = new ActionRow();
             additionalToolsRow.setTitle("Additional tools");
             additionalToolsRow.setIconName("applications-utilities-symbolic");
@@ -85,6 +93,12 @@ class DeviceWidget: PreferencesGroup {
         auto rootWindow = cast(Window) this.getRoot();
         toolSelectionWindow = new ToolSelectionWindow(rootWindow, device);
         toolSelectionWindow.show();
+    }
+
+    void showManageInstalledApps(iDevice device) {
+        auto rootWindow = cast(Window) this.getRoot();
+        auto window = new ManageInstalledAppsWindow(rootWindow, device, runningApplication);
+        window.show();
     }
 
     void selectApplication() {

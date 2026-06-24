@@ -8,10 +8,6 @@
 	"copyright": "Copyright © 2023, Dadoum",
 	"targetType": "staticLibrary",
 
-	"sourceFiles": [
-		"../source/utils.d"
-	],
-
 	"dependencies": {
 		"slf4d": "~>2"
 	},
@@ -29,12 +25,18 @@
 			"name": "macOS",
 			"platforms": ["osx"],
 
-			"dependencies": {}
+			"dependencies": {},
+
+			"lflags-osx": ["-framework", "Security", "-framework", "CoreFoundation"]
 		},
 		{
 			"name": "libsecret",
 			"platforms": ["linux"],
 			"versions": ["LibSecret"],
+
+			"sourceFiles": [
+				"../source/utils.d"
+			],
 
 			"sourcePaths": [
 				"libsecret/"

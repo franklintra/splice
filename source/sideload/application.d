@@ -7,6 +7,7 @@ import file = std.file;
 import std.parallelism;
 import std.path;
 import std.string;
+import std.uuid;
 import std.zip;
 
 import slf4d;
@@ -19,16 +20,18 @@ import sideload.plugin;
 
 class Application: Bundle {
     string tempPath;
+    /// The path the application was opened from (the source IPA when opened from
+    /// a file, otherwise the app bundle folder). Used by the installed-apps
+    /// registry to remember where to re-sign from later.
+    string sourcePath;
 
     this(string path) {
+        sourcePath = path;
         if (file.isFile(path)) {
-            tempPath = file.tempDir().buildPath(baseName(path));
-            if (file.exists(tempPath)) {
-                file.rmdirRecurse(tempPath);
-                file.mkdir(tempPath);
-            } else {
-                file.mkdirRecurse(tempPath);
-            }
+            // Use a unique temp directory per Application so concurrent runs (or
+            // two installs of IPAs sharing the same base name) never collide.
+            tempPath = file.tempDir().buildPath("Sideloader-" ~ randomUUID().toString());
+            file.mkdirRecurse(tempPath);
             auto ipa = new ZipArchive(file.read(path));
 
             foreach (kv; parallel(ipa.directory().byKeyValue())) {
@@ -63,9 +66,23 @@ class Application: Bundle {
     }
 
     ~this() {
-        // if (tempPath && file.exists(tempPath)) {
-        //     file.rmdirRecurse(tempPath);
-        // }
+        // Intentionally empty: file I/O in the GC destructor is unreliable in D.
+        // Callers must invoke cleanup() explicitly once the temp dir is no longer
+        // needed (see sideloadFull).
+    }
+
+    /// Removes the extraction temp directory if it exists. Idempotent and
+    /// non-fatal: safe to call more than once, and a failure is logged rather
+    /// than thrown so it can never abort an otherwise successful install.
+    void cleanup() {
+        if (tempPath && file.exists(tempPath)) {
+            try {
+                file.rmdirRecurse(tempPath);
+            } catch (Exception e) {
+                getLogger().warnF!"Could not remove temporary extraction directory %s: %s"(tempPath, e.msg);
+            }
+        }
+        tempPath = null;
     }
 
     /// Fetches a mobileprovision file for the app

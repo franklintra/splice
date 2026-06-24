@@ -42,22 +42,9 @@ struct ListTools
 
     int opCall()
     {
-        string deviceId;
-
-        if (auto udid = udid) {
-            deviceId = udid;
-        } else {
-            auto deviceList = iDevice.deviceList();
-            if (deviceList.length == 0) {
-                getLogger().error("Please connect a device.");
-                return 1;
-            } else if (deviceList.length > 1) {
-                getLogger().error("Too many devices connected, please use --udid to select the target device.");
-                return 1;
-            }
-
-            deviceId = deviceList[0].udid;
-        }
+        string deviceId = selectConnectedUdid(udid);
+        if (!deviceId)
+            return 1;
 
         iDevice device = new iDevice(deviceId);
 
@@ -87,22 +74,9 @@ struct RunTool
 
     int opCall()
     {
-        string deviceId;
-
-        if (udid) {
-            deviceId = udid;
-        } else {
-            auto deviceList = iDevice.deviceList();
-            if (deviceList.length == 0) {
-                getLogger().error("Please connect a device.");
-                return 1;
-            } else if (deviceList.length > 1) {
-                getLogger().error("Too many devices connected, please use --udid to select the target device.");
-                return 1;
-            }
-
-            deviceId = deviceList[0].udid;
-        }
+        string deviceId = selectConnectedUdid(udid);
+        if (!deviceId)
+            return 1;
 
         iDevice device = new iDevice(deviceId);
 

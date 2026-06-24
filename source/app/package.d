@@ -66,7 +66,16 @@ bool downloadAndInstallDeps(string configurationPath, bool delegate(float progre
     return true;
 }
 
-ProvisioningData initializeADI(string configurationPath) {
+/**
+ * Loads (or freshly creates) the local `Device`, without touching the Android
+ * ADI native libraries or provisioning a machine.
+ *
+ * This is enough when anisette headers come from a *remote* server: the remote
+ * provider supplies the OTP/machine identifiers, but a `Device` object is still
+ * created so the on-disk identity (`device.json`) stays stable across runs and
+ * is available to any code that still references local device fields.
+ */
+Device initializeDevice(string configurationPath) {
     auto log = getLogger();
     auto device = new Device(configurationPath.buildPath("device.json"));
 
@@ -85,6 +94,12 @@ ProvisioningData initializeADI(string configurationPath) {
         log.info("Device created successfully.");
     }
     log.debug_("Device OK.");
+    return device;
+}
+
+ProvisioningData initializeADI(string configurationPath) {
+    auto log = getLogger();
+    auto device = initializeDevice(configurationPath);
 
     auto adi = new ADI(configurationPath.buildPath("lib"));
     adi.provisioningPath = configurationPath;

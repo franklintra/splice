@@ -3,8 +3,6 @@ module main;
 import core.stdc.signal;
 
 import file = std.file;
-import std.path;
-import std.process;
 import std.traits;
 
 import glib.MessageLog;
@@ -12,6 +10,8 @@ import glib.MessageLog;
 import slf4d;
 import slf4d.default_provider;
 import slf4d.provider;
+
+import app.session : systemConfigurationPath;
 
 import constants;
 import utils;
@@ -57,10 +57,9 @@ int main(string[] args) {
         logger.log(level, cast(string) messageC.fromStringz(), null, cast(string) logDomainC.fromStringz(), "");
     }, null);
 
-    string configurationPath = environment.get("XDG_CONFIG_DIR")
-    .orDefault("~/.config")
-    .buildPath(applicationName)
-    .expandTilde();
+    // Resolved via the shared core helper (single source of truth, also honours
+    // the SIDELOADER_CONFIG_DIR override).
+    string configurationPath = systemConfigurationPath();
 
     auto log = getLogger();
     log.info(versionStr);
