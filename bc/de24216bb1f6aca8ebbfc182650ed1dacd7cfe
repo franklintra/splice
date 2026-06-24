@@ -1,0 +1,28 @@
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_b5a9f687d2e6af 478,481,486
+  s_2eea0ee1da1f20::t_bbef6ca60763c2 513
+  s_2eea0ee1da1f20::t_fb5b11776daf3a 344
+frontends/cli/source/apps.d
+  s_2eea0ee1da1f20::t_6ab124c26d53b6 1-436
+source/imobiledevice/package.d
+  s_2eea0ee1da1f20::t_469d261a7c3af3 268
+  s_2eea0ee1da1f20::t_9de7641e720024 229-238,240-267,269-283
+  s_2eea0ee1da1f20::t_4ec76ce7009c37 239
+  s_2eea0ee1da1f20::t_f5dac5193e47f4 35-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "bcde24216bb1f6aca8ebbfc182650ed1dacd7cfe",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
