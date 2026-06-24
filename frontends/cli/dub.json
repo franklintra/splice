@@ -10,6 +10,7 @@
 
     "dependencies": {
         "sideloader": { "path": "../../" },
+        "keyring": { "path": "../../keyring/" },
         "argparse": "~>1.3.0",
         "progress": "~>5.0.2",
         "slf4d": "~>2"

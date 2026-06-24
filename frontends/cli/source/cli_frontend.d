@@ -105,29 +105,10 @@ string readPasswordLine(string prompt) {
     }
 }
 
-DeveloperSession login(Device device, ADI adi, bool interactive) {
+/// Attempts an Apple login with the given credentials, wiring the interactive
+/// 2FA prompt. Returns the session on success, or `null` on failure.
+private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, string password) {
     auto log = getLogger();
-
-    log.info("Logging in...");
-
-    DeveloperSession account;
-
-    // TODO Keyring stuff
-    // ...
-
-    if (account) return null;
-    if (!interactive) {
-        log.error("You are not logged in. (use `sidestore login` to log-in, or add `-i` to make us ask you the account)");
-        return null;
-    }
-
-    log.info("Please enter your account informations. They will only be sent to Apple servers.");
-    log.info("See it for yourself at https://github.com/Dadoum/Sideloader/");
-
-    write("Apple ID: ");
-    string appleId = readln().chomp();
-    string password = readPasswordLine("Password: ");
-
     return DeveloperSession.login(
         device,
         adi,
@@ -152,6 +133,46 @@ DeveloperSession login(Device device, ADI adi, bool interactive) {
             return null;
         }
     );
+}
+
+DeveloperSession login(Device device, ADI adi, bool interactive) {
+    import keyring;
+
+    auto log = getLogger();
+
+    log.info("Logging in...");
+
+    auto kr = makeKeyring();
+
+    // Try to re-use stored credentials so the user isn't re-prompted.
+    string storedAppleId, storedPassword;
+    if (deserializeCredentials(kr.lookup(), storedAppleId, storedPassword)) {
+        log.infoF!"Found stored credentials for %s, logging in silently..."(storedAppleId);
+        if (auto session = attemptLogin(device, adi, storedAppleId, storedPassword))
+            return session;
+        log.warn("Silent login with stored credentials failed; clearing them.");
+        kr.clear();
+    }
+
+    if (!interactive) {
+        log.error("You are not logged in. (use `sidestore login` to log-in, or add `-i` to make us ask you the account)");
+        return null;
+    }
+
+    log.info("Please enter your account informations. They will only be sent to Apple servers.");
+    log.info("See it for yourself at https://github.com/Dadoum/Sideloader/");
+
+    write("Apple ID: ");
+    string appleId = readln().chomp();
+    string password = readPasswordLine("Password: ");
+
+    auto session = attemptLogin(device, adi, appleId, password);
+    if (session) {
+        // Persist the credentials in the OS secure store so subsequent runs
+        // don't have to prompt again.
+        kr.store(serializeCredentials(appleId, password));
+    }
+    return session;
 }
 
 auto initializeADI(string configurationPath)
