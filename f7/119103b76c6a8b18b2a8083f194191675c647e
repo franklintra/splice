@@ -1,0 +1,20 @@
+frontends/cli/source/certificate.d
+  s_2557a0523a3216::t_be3a1d78274531 6,22
+  s_2557a0523a3216::t_bd9862208f6c7a 62-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "f7119103b76c6a8b18b2a8083f194191675c647e",
+  "prompts": {},
+  "sessions": {
+    "s_2557a0523a3216": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0805d643-86b2-4ce7-8388-fe0a13bee588",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
