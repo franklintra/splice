@@ -63,7 +63,7 @@ with your Apple ID.
 ## Table of contents
 
 * [Install](#install)
-* [Quick start — sideload SideStore](#quick-start--sideload-sidestore)
+* [Quick start](#quick-start)
 * [Commands](#commands)
 * [Set-it-and-forget-it auto-refresh](#set-it-and-forget-it-auto-refresh)
 * [Wireless install & refresh over Wi-Fi](#wireless-install--refresh-over-wi-fi)
@@ -100,26 +100,22 @@ attempted), and OpenSSL (used for networking; planned for removal).
 
 ---
 
-## Quick start — sideload SideStore
+## Quick start
 
-1. Download `SideStore.ipa` from <https://sidestore.io>.
-2. Get Splice (Actions artifact, or build it).
+1. Get Splice (Actions artifact, or build it) and an `.ipa` you want to install.
+2. Enable **Developer Mode** on the iPhone if it isn't already.
 3. Sign in once so Splice can remember your account (handles 2FA):
    ```sh
    splice login
    ```
-4. Install the IPA (re-run if you hit a transient error):
+4. Connect the device and install the app (re-run if you hit a transient error):
    ```sh
-   splice install SideStore.ipa
+   splice install App.ipa
    ```
-5. Enable **Developer Mode** on the iPhone if it isn't already.
-6. Generate and push the pairing file for SideStore in one step:
-   ```sh
-   splice sidestore pair
-   ```
-7. Open SideStore on the phone, sign in with the **same Apple ID**, and refresh.
 
-Want it to keep working without you? Set up [auto-refresh](#set-it-and-forget-it-auto-refresh).
+That's it — the app is signed and installed. To keep it from expiring after ~7 days,
+set up [auto-refresh](#set-it-and-forget-it-auto-refresh) so Splice re-signs it for
+you automatically.
 
 ---
 
