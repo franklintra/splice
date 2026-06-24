@@ -46,6 +46,7 @@ import argparse;
 import app;
 import app.session;
 import jsonout;
+import keyring;
 import utils;
 
 version = X509;
@@ -157,8 +158,18 @@ private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, st
     );
 }
 
+/// Persists `session`'s account into the keyring: the password (kept as the SRP
+/// fallback) plus the freshly-minted adsid/token so the next run can reconstruct
+/// the session without SRP or 2FA. `defaultAccount` becomes the blob's default.
+private void persistSession(Keyring kr, DeveloperSession session, string appleId, string password, string defaultAccount) {
+    StoredAccount[] current;
+    string currentDefault;
+    deserializeAccounts(kr.lookup(), current, currentDefault);
+    current = upsertAccount(current, StoredAccount(appleId, password, session.identityId, session.gsToken));
+    kr.store(serializeAccounts(current, defaultAccount.length ? defaultAccount : appleId));
+}
+
 DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvider anisetteProvider = null) {
-    import keyring;
     import app.persistence : loadState, saveState;
 
     auto log = getLogger();
@@ -185,10 +196,28 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
             log.warnF!"No stored account matches --account %s; using %s instead."(g_selectedAccount, chosen.appleId);
         }
 
-        log.infoF!"Found stored credentials for %s, logging in silently..."(chosen.appleId);
+        // Fast path: replay a stored GS token. This skips SRP and 2FA entirely
+        // and is the whole point of token persistence — only a token Apple
+        // rejects sends us down the password path below.
+        if (chosen.adsid.length && chosen.token.length) {
+            log.infoF!"Found a stored session token for %s, restoring it..."(chosen.appleId);
+            auto restored = DeveloperSession.fromToken(device, adi, chosen.appleId, chosen.adsid, chosen.token, anisetteProvider).match!(
+                (DeveloperSession session) => session,
+                (AppleLoginError _) => cast(DeveloperSession) null
+            );
+            if (restored !is null)
+                return restored;
+            log.infoF!"Stored token for %s is no longer valid; falling back to password login."(chosen.appleId);
+        }
+
+        log.infoF!"Logging in silently with stored credentials for %s..."(chosen.appleId);
         AppleLoginError silentError;
-        if (auto session = attemptLogin(device, adi, chosen.appleId, chosen.password, silentError, anisetteProvider))
+        if (auto session = attemptLogin(device, adi, chosen.appleId, chosen.password, silentError, anisetteProvider)) {
+            // Refresh the persisted token from this login so the next run can
+            // skip SRP again; keep the existing default account.
+            persistSession(kr, session, chosen.appleId, chosen.password, storedDefault.length ? storedDefault : chosen.appleId);
             return session;
+        }
 
         // Only discard stored credentials when Apple definitively rejects them
         // (the saved password is wrong). Transient or externally-recoverable
@@ -235,13 +264,10 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
     AppleLoginError interactiveError;
     auto session = attemptLogin(device, adi, appleId, password, interactiveError, anisetteProvider);
     if (session) {
-        // Persist (add/update) this account in the OS secure store and make it the
-        // default, so subsequent runs don't have to prompt again.
-        StoredAccount[] current;
-        string currentDefault;
-        deserializeAccounts(kr.lookup(), current, currentDefault);
-        current = upsertAccount(current, StoredAccount(appleId, password));
-        kr.store(serializeAccounts(current, appleId));
+        // Persist (add/update) this account in the OS secure store — password
+        // plus the freshly-minted token — and make it the default, so subsequent
+        // runs reuse the token and don't have to prompt again.
+        persistSession(kr, session, appleId, password, appleId);
 
         auto state = loadState(configurationPath);
         state.defaultAccount = appleId;

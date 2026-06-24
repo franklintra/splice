@@ -128,25 +128,40 @@ bool deserializeCredentials(string blob, out string appleId, out string password
 }
 
 /// One stored Apple account (credentials kept in the keyring blob).
+///
+/// `adsid` + `token` are the GrandSlam identity id and session token captured
+/// from a successful login. When present they let a later run reconstruct the
+/// session directly — skipping SRP and 2FA — and are only discarded once Apple
+/// rejects them. They are empty for accounts stored before this was introduced
+/// (and until the first login refreshes them); the `password` remains the
+/// fallback whenever the token is missing or rejected.
 struct StoredAccount
 {
     string appleId;
     string password;
+    string adsid;
+    string token;
 }
 
 /// Serialize a set of Apple accounts plus a chosen default into the opaque
 /// keyring blob. The format is:
-/// `{ "accounts": [ {"appleId": ..., "password": ...}, ... ], "defaultAccount": ... }`.
+/// `{ "accounts": [ {"appleId": ..., "password": ..., "adsid": ..., "token": ...}, ... ], "defaultAccount": ... }`.
+/// `adsid`/`token` are omitted for accounts that don't have them yet.
 string serializeAccounts(StoredAccount[] accounts, string defaultAccount)
 {
     import std.json;
     JSONValue[] arr;
     foreach (acc; accounts)
     {
-        arr ~= JSONValue([
+        JSONValue entry = [
             "appleId": JSONValue(acc.appleId),
             "password": JSONValue(acc.password),
-        ]);
+        ];
+        if (acc.adsid.length)
+            entry.object["adsid"] = JSONValue(acc.adsid);
+        if (acc.token.length)
+            entry.object["token"] = JSONValue(acc.token);
+        arr ~= entry;
     }
     JSONValue value = [
         "accounts": JSONValue(arr),
@@ -189,7 +204,15 @@ bool deserializeAccounts(string blob, out StoredAccount[] accounts, out string d
                     continue;
                 if (idPtr.type != JSONType.string || pwPtr.type != JSONType.string)
                     continue;
-                accounts ~= StoredAccount(idPtr.str, pwPtr.str);
+                // adsid/token are optional (absent in pre-token blobs).
+                string adsid, token;
+                if (auto p = "adsid" in entry.object)
+                    if (p.type == JSONType.string)
+                        adsid = p.str;
+                if (auto p = "token" in entry.object)
+                    if (p.type == JSONType.string)
+                        token = p.str;
+                accounts ~= StoredAccount(idPtr.str, pwPtr.str, adsid, token);
             }
             if (auto dfltPtr = "defaultAccount" in value.object)
             {
@@ -232,7 +255,7 @@ StoredAccount pickAccount(StoredAccount[] accounts, string defaultAccount)
 }
 
 /// Inserts or updates `account` in `accounts` (keyed by Apple ID), returning the
-/// updated list. Existing passwords are replaced on a match.
+/// updated list. On a match the password, adsid and token are all replaced.
 StoredAccount[] upsertAccount(StoredAccount[] accounts, StoredAccount account)
 {
     foreach (ref acc; accounts)
@@ -240,6 +263,8 @@ StoredAccount[] upsertAccount(StoredAccount[] accounts, StoredAccount account)
         if (acc.appleId == account.appleId)
         {
             acc.password = account.password;
+            acc.adsid = account.adsid;
+            acc.token = account.token;
             return accounts;
         }
     }
@@ -260,9 +285,9 @@ StoredAccount[] removeAccount(StoredAccount[] accounts, string appleId)
 
 unittest
 {
-    // Multi-account round-trip.
+    // Multi-account round-trip. Alice carries a token; Bob is password-only.
     StoredAccount[] accounts = [
-        StoredAccount("alice@example.com", "pw1"),
+        StoredAccount("alice@example.com", "pw1", "alice-adsid", "alice-token"),
         StoredAccount("bob@example.com", "pw2"),
     ];
     auto blob = serializeAccounts(accounts, "bob@example.com");
@@ -273,6 +298,14 @@ unittest
     assert(parsed.length == 2);
     assert(dflt == "bob@example.com");
     assert(parsed[0].appleId == "alice@example.com" && parsed[0].password == "pw1");
+    // adsid/token survive the round-trip, and stay empty when not provided.
+    assert(parsed[0].adsid == "alice-adsid" && parsed[0].token == "alice-token");
+    assert(parsed[1].adsid == "" && parsed[1].token == "");
+
+    // upsert refreshes the token (and password) on a matching account.
+    auto reTokened = upsertAccount(accounts, StoredAccount("alice@example.com", "pw1", "new-adsid", "new-token"));
+    assert(pickAccount(reTokened, "alice@example.com").token == "new-token");
+    assert(pickAccount(reTokened, "alice@example.com").adsid == "new-adsid");
 
     // pickAccount honours the default, falls back to the first.
     assert(pickAccount(parsed, "bob@example.com").appleId == "bob@example.com");

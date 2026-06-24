@@ -98,6 +98,43 @@ class DeveloperSession {
         );
     }
 
+    /// Reconstruct a session from a previously-persisted GrandSlam token
+    /// (`adsid` + `token`), skipping SRP and 2FA entirely. The token is
+    /// validated with a single lightweight authenticated request
+    /// (`viewDeveloper`); if Apple rejects it — or the probe otherwise fails —
+    /// an `AppleLoginError(tokenRejected)` is returned so the caller can fall
+    /// back to a full password login. No network calls beyond that probe.
+    static DeveloperLoginResponse fromToken(Device device, ADI adi, string appleId, string adsid, string token, AnisetteProvider anisetteProvider = null) {
+        auto log = getLogger();
+        log.infoF!"Restoring DeveloperSession for %s from a stored token..."(appleId);
+
+        // The URL bag is only consulted during SRP/2FA; authenticated developer
+        // portal calls use fixed developerservices2 endpoints, so an empty bag
+        // is fine for a token-restored session.
+        auto session = new DeveloperSession(
+            new AppleAccount(device, adi, anisetteProvider, XcodeApplicationInformation, null, appleId, adsid, token)
+        );
+
+        try {
+            return session.viewDeveloper().match!(
+                (None _) {
+                    log.info("Stored token accepted.");
+                    return DeveloperLoginResponse(session);
+                },
+                (DeveloperPortalError err) {
+                    log.warnF!"Stored token rejected by Apple (%d: %s)."(err.statusCode, err.description);
+                    return DeveloperLoginResponse(AppleLoginError(AppleLoginErrorCode.tokenRejected, err.description));
+                }
+            );
+        } catch (Exception e) {
+            // A network/parse failure during the probe is indistinguishable here
+            // from a stale token; report it as rejected and let the caller decide
+            // (it will try the password path, which does not purge on this code).
+            log.warnF!"Could not validate stored token: %s"(e.msg);
+            return DeveloperLoginResponse(AppleLoginError(AppleLoginErrorCode.tokenRejected, e.msg));
+        }
+    }
+
     static DeveloperLoginResponse login(Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
         log.infoF!"Creating DeveloperSession for %s..."(appleId);

@@ -46,6 +46,7 @@ enum AppleLoginErrorCode {
     anisetteProvisioningFailed = 5,
     urlSwitchingUnsupported = 6,
     tooManyRetries = 7,
+    tokenRejected = 8,
     accountLocked = -20209,
     invalidValidationCode = -21669,
     invalidPassword = -22406,
@@ -90,6 +91,17 @@ package class AppleAccount {
 
     string appleId() {
         return appleIdentifier;
+    }
+
+    // GrandSlam identity id (adsid) and session token, exposed so a successful
+    // login can be persisted and later replayed via `DeveloperSession.fromToken`
+    // without redoing SRP. See keyring's `StoredAccount`.
+    string identityId() {
+        return adsid;
+    }
+
+    string gsToken() {
+        return token;
     }
 
     package this(Device device, ADI adi, AnisetteProvider anisetteProvider, ApplicationInformation appInfo, string[string] urlBag, string appleId, string adsid, string token) {
