@@ -1,0 +1,26 @@
+frontends/cli/source/ui.d
+  s_48c46507a92178::t_710588ed6f010f 33-46
+  s_48c46507a92178::t_b7971ace9bdd8a 86
+.github/workflows/build-cli.yml
+  s_48c46507a92178::t_6e0eb81d531d7b 95,98-128
+.github/actions/rename-files/action.yml
+  s_48c46507a92178::t_b8afc4e5b7c2df 19,25-26,31,36
+.github/actions/write-version-file/action.yml
+  s_48c46507a92178::t_bacfc25499b0d2 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "ef0e5f420399f9da6872a85f2cd9f914401e17cb",
+  "prompts": {},
+  "sessions": {
+    "s_48c46507a92178": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23bd772b-c296-496f-8727-f05414d3e460",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
