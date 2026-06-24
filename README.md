@@ -2,19 +2,19 @@
 
 # Splice
 
-### Splice apps onto any iPhone — and keep them alive.
+### Splice apps onto any iPhone - and keep them alive.
 
 **The open-source, cross-platform iOS sideloader with AltServer-style auto-refresh.**
-Install apps on your iPhone from **Linux, Windows, or macOS** — no Mac, no cable after the first pairing, and your apps never silently expire.
+Install apps on your iPhone from **Linux, Windows, or macOS** - no Mac, no cable after the first pairing, and your apps never silently expire.
 
 </div>
 
 > **Splice is a maintained fork of [Dadoum/Sideloader](https://github.com/Dadoum/Sideloader).**
-> All of the hard original work — the GrandSlam authentication, the anisette
-> emulation, the signing engine, the Linux-native breakthrough — is
+> All of the hard original work - the GrandSlam authentication, the anisette
+> emulation, the signing engine, the Linux-native breakthrough - is
 > [Dadoum](https://github.com/Dadoum)'s and the upstream contributors'. Splice
 > builds on that foundation to turn the one-shot signer into a modern, multi-account
-> re-sign/refresh tool. Huge thanks to them — please
+> re-sign/refresh tool. Huge thanks to them - please
 > [sponsor Dadoum](https://github.com/sponsors/Dadoum).
 
 ---
@@ -22,13 +22,13 @@ Install apps on your iPhone from **Linux, Windows, or macOS** — no Mac, no cab
 ## What is Splice?
 
 Splice installs third-party `.ipa` apps onto an iPhone or iPad using a free Apple
-developer signature — the same thing Xcode does when you run your own app on your
+developer signature - the same thing Xcode does when you run your own app on your
 device. Think of it as an open-source, cross-platform replacement for *Cydia
 Impactor* and a Linux-first sibling to *AltServer*.
 
 The catch with free-account signing has always been the **7-day expiry**: the
 provisioning profile dies after a week and the app stops launching. Splice solves
-that the way AltServer does — a **background daemon re-signs your apps before they
+that the way AltServer does - a **background daemon re-signs your apps before they
 expire**, so they just keep working. Unlike AltServer, that daemon runs anywhere,
 including headless on a Linux box or a Raspberry Pi.
 
@@ -51,7 +51,7 @@ including headless on a Linux box or a Raspberry Pi.
 | Scriptable `--json` output | ✅ | ❌ | ❌ | ❌ |
 
 > **The thing nobody else does:** run `splice service install` on a Raspberry Pi or
-> a home server and your sideloaded apps get re-signed forever — over Wi-Fi, with no
+> a home server and your sideloaded apps get re-signed forever - over Wi-Fi, with no
 > Mac in the house and no terminal left open.
 
 **Your Apple credentials are only ever sent to Apple's own servers**, and because
@@ -87,7 +87,7 @@ with your Apple ID.
 There is a cross-platform **CLI** (Linux, Windows, macOS) and a **GTK 4** desktop
 frontend for Linux; a Qt frontend for all three desktops is in progress.
 
-Until tagged releases land, builds are produced by GitHub Actions — grab the CLI or
+Until tagged releases land, builds are produced by GitHub Actions - grab the CLI or
 GTK artifact for your OS from the **Actions** tab, or [build it yourself](#build-it-yourself).
 
 **Runtime dependencies:** `libimobiledevice`, `libplist-2.x` (2.2 and 2.3 both
@@ -113,7 +113,7 @@ attempted), and OpenSSL (used for networking; planned for removal).
    splice install App.ipa
    ```
 
-That's it — the app is signed and installed. To keep it from expiring after ~7 days,
+That's it - the app is signed and installed. To keep it from expiring after ~7 days,
 set up [auto-refresh](#set-it-and-forget-it-auto-refresh) so Splice re-signs it for
 you automatically.
 
@@ -187,9 +187,9 @@ splice service uninstall                # disable and remove it (idempotent)
 
 The service is per-user and uses your platform's native scheduler:
 
-- **macOS** — a launchd LaunchAgent (`~/Library/LaunchAgents/dev.dadoum.sideloader.plist`).
-- **Linux** — a systemd *user* service + timer (`sideloader-refresh.{service,timer}` under `~/.config/systemd/user`).
-- **Windows** — a Task Scheduler task (`Sideloader\Refresh`).
+- **macOS** - a launchd LaunchAgent (`~/Library/LaunchAgents/dev.dadoum.sideloader.plist`).
+- **Linux** - a systemd *user* service + timer (`sideloader-refresh.{service,timer}` under `~/.config/systemd/user`).
+- **Windows** - a Task Scheduler task (`Sideloader\Refresh`).
 
 Override the unit location for testing with `--unit-dir` (or the
 `SIDELOADER_LAUNCH_AGENTS_DIR` / `SIDELOADER_SYSTEMD_USER_DIR` env vars). Use
@@ -204,7 +204,7 @@ written under the config directory's `logs/`.
 ## Wireless install & refresh over Wi-Fi
 
 Once a device has been paired over USB at least once (and "Sync over Wi-Fi" is
-enabled — the same trust that lets Finder/iTunes see the device without a cable),
+enabled - the same trust that lets Finder/iTunes see the device without a cable),
 Splice can install, refresh, and run its daemon over Wi-Fi on the same network.
 
 * `splice install`, `splice refresh`, `splice uninstall`, and `splice tool …`
@@ -213,7 +213,7 @@ Splice can install, refresh, and run its daemon over Wi-Fi on the same network.
   refreshes it twice), and each command logs the transport it uses.
 * When a device is reachable over **both**, Splice prefers the cable (more
   reliable). Pass `--wifi` to `install`, `refresh`, or `daemon` to force Wi-Fi.
-* A device reachable **only** over Wi-Fi is selected automatically — no `--wifi`
+* A device reachable **only** over Wi-Fi is selected automatically - no `--wifi`
   needed.
 * `splice daemon` enumerates and refreshes both USB and Wi-Fi devices, so apps keep
   getting re-signed while your phone is merely on the same network.
@@ -251,7 +251,7 @@ alongside the binary.
 
 To talk to Apple's GrandSlam servers, Splice attaches device/identity ("anisette")
 headers to every request. By default it generates them **locally** by emulating
-Apple's provisioning with native libraries scraped from the Apple Music APK — no
+Apple's provisioning with native libraries scraped from the Apple Music APK - no
 external service required, but it has to download those libraries and provision the
 machine.
 
@@ -299,7 +299,7 @@ disambiguate). All sub-commands honour `--json`.
 
 ## Tweak injection
 
-`splice tweak` patches an IPA so it loads extra dylibs on launch, *before* signing —
+`splice tweak` patches an IPA so it loads extra dylibs on launch, *before* signing -
 so the injected dylibs get signed together with the rest of the bundle.
 
 ```sh
@@ -318,7 +318,7 @@ splice tweak App.ipa --inject MyTweak.dylib --install             # sign & insta
 **Limitations:** injection needs free space in the Mach-O header; if a binary lacks
 it, the command fails loudly rather than corrupting the executable. Many `.deb`
 tweaks are *substrate-based* and expect a hooking runtime (CydiaSubstrate / ElleKit)
-on the device — Splice does not vendor one and warns when an injected dylib links
+on the device - Splice does not vendor one and warns when an injected dylib links
 against a missing substrate. Plain dylibs load without extra setup.
 
 ---
@@ -328,7 +328,7 @@ against a missing substrate. Plain dylibs load without extra setup.
 Some apps (emulators, interpreters, JS engines) need *just-in-time* compilation,
 which iOS only allows for a process the kernel flagged `CS_DEBUGGED`. Attaching a
 debugger sets that flag; `splice jit` does this the same way
-SideJITServer / StikDebug / Jitterbug do — it connects to the on-device
+SideJITServer / StikDebug / Jitterbug do - it connects to the on-device
 `com.apple.debugserver`, attaches to the already-running app, then detaches, leaving
 it running with JIT enabled.
 
@@ -344,7 +344,7 @@ easiest way), and the **app already running** in the foreground. Pass the origin
 bundle id (or the on-device id); Splice resolves the executable and accepts the
 mangled `<bundleId>.<teamId>` form. Supports `--json`.
 
-> JIT is currently CLI-only — the generic GTK tool runner can't ask *which* app to
+> JIT is currently CLI-only - the generic GTK tool runner can't ask *which* app to
 > target, which JIT requires.
 
 ---
@@ -354,7 +354,7 @@ mangled `<bundleId>.<teamId>` form. Supports `--json`.
 A normal install uses a free **developer certificate**, so the app dies after ~7
 days unless re-signed. On a *vulnerable* iOS version, Splice can instead do a
 **permanent** install using the CoreTrust signature-validation bug
-(**CVE-2023-41991**) — the same exploit TrollStore 2 uses. A permanent app survives
+(**CVE-2023-41991**) - the same exploit TrollStore 2 uses. A permanent app survives
 past expiry, needs **no Apple ID**, is never re-signed, and is ignored by the
 refresh daemon.
 
@@ -371,10 +371,10 @@ splice install --permanent App.ipa       # alias: --troll
 > **Read before using:**
 > * Works only on **iOS/iPadOS 14.0 – 16.6.1**. **Patched on 16.7+** (all 17.x/18.x
 >   and 16.7.x). On a patched/too-old device, `--permanent` is **refused** with a
->   clear error — install normally instead.
+>   clear error - install normally instead.
 > * It relies on a now-patched exploit. Updating to 16.7+ removes it; existing
 >   permanent apps generally keep working, but you can't install new ones.
-> * A permanent app is **your responsibility** — not managed or renewed by Splice.
+> * A permanent app is **your responsibility** - not managed or renewed by Splice.
 >   Only install software you understand and trust.
 
 ---
@@ -391,7 +391,7 @@ splice sidestore pair                     # pair + push the pairing file in one 
 splice sidestore pair --udid <UDID>
 ```
 
-SideStore must already be installed (from <https://sidestore.io>) — these commands
+SideStore must already be installed (from <https://sidestore.io>) - these commands
 detect it and hand it the pairing file; they don't install it. Keep the device
 unlocked and trust the computer when prompted. With no device connected it prints a
 clear message and exits non-zero (never crashes).
@@ -406,10 +406,10 @@ clear message and exits non-zero (never crashes).
 
 Splice fetches an iOS development certificate the way Xcode would if you were
 developing your own app, and uses it to sign and deploy third-party apps. **No Mac,
-Windows machine, or Apple software is required** — just `libimobiledevice` and
+Windows machine, or Apple software is required** - just `libimobiledevice` and
 `libplist`.
 
-You do need an Apple account to play the role of the "developer" — any account
+You do need an Apple account to play the role of the "developer" - any account
 works, ideally a burner, not the Apple ID on your phone (see the SideStore wiki for
 easy ways to make one; on Linux, installing Apple Music on Waydroid is one route).
 
@@ -448,11 +448,11 @@ then `dub build`. See the toolchain note above.
 
 ## Platform support
 
-* **Linux** — the original priority (no real alternative existed before). CLI + GTK 4.
-* **Windows** — CLI; needs MSVC builds of the native deps + the VC++ redistributable.
-* **macOS** — CLI works; Apple-Silicon library auto-resolution means no manual
+* **Linux** - the original priority (no real alternative existed before). CLI + GTK 4.
+* **Windows** - CLI; needs MSVC builds of the native deps + the VC++ redistributable.
+* **macOS** - CLI works; Apple-Silicon library auto-resolution means no manual
   `DYLD_FALLBACK_LIBRARY_PATH`. A SwiftUI GUI is scaffolded but unbuilt (no Mac to
-  develop it — contributions welcome).
+  develop it - contributions welcome).
 
 iOS version range is broad but not exhaustively mapped; 32-bit support is untested.
 Please open an issue with anything that breaks.
@@ -465,12 +465,12 @@ Splice stands entirely on [Dadoum](https://github.com/Dadoum)'s
 [Sideloader](https://github.com/Dadoum/Sideloader) and the upstream community. With
 thanks to:
 
-- [Dadoum](https://github.com/Dadoum) and all Sideloader contributors — the engine,
+- [Dadoum](https://github.com/Dadoum) and all Sideloader contributors - the engine,
   the auth, and the Linux-native breakthrough this builds on.
 - [People on this thread](https://github.com/horrorho/InflatableDonkey/issues/87):
   first cues on machine/account authentication.
-- The **SideStore** team — testing and machine-authentication help.
-- The **AltStore** team — account auth and 2FA (especially kabiroberai's code).
+- The **SideStore** team - testing and machine-authentication help.
+- The **AltStore** team - account auth and 2FA (especially kabiroberai's code).
 - **zhlynn** (zsign), **indygreg** (rcodesign), and
   [teryx's article on code signatures](https://medium.com/csit-tech-blog/demystifying-ios-code-signature-309d52c2ff1d).
 - Apple Music for Android libraries, and Apple's AuthKit/AuthKitWin for the request
@@ -481,8 +481,8 @@ thanks to:
 
 Splice is free and open source. If it's useful to you:
 
-- ⭐ **Star this repo** — it's the cheapest way to help it reach people.
-- 💙 **[Sponsor Dadoum](https://github.com/sponsors/Dadoum)** — the upstream author
+- ⭐ **Star this repo** - it's the cheapest way to help it reach people.
+- 💙 **[Sponsor Dadoum](https://github.com/sponsors/Dadoum)** - the upstream author
   whose years of reverse-engineering made all of this possible. When Cydia Impactor
   died in 2019, Apple had released nothing for end users on Linux; it took two years
   of work to solve that without reimplementing the Windows API. That work is the
