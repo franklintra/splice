@@ -1,0 +1,57 @@
+source/app/package.d
+  s_2eea0ee1da1f20::t_673479e447ef14 69-78,97-102
+source/server/developersession.d
+  s_2eea0ee1da1f20::t_c1ad10a05628c4 23
+  s_2eea0ee1da1f20::t_412edbdfcb0424 86,89,101,104
+README.md
+  s_2eea0ee1da1f20::t_15c2b53542b4e8 180-204
+source/server/anisette.d
+  s_2eea0ee1da1f20::t_9ef971248bd22b 1-27,29-303
+  s_2eea0ee1da1f20::t_bc95d6a0762215 28
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_e36ee210d8345c 161
+  s_2eea0ee1da1f20::t_4c695a6c3ee3c5 391-393
+  s_2eea0ee1da1f20::t_d9cd6001e99d5e 61-68
+  s_2eea0ee1da1f20::t_a498b3ec05fe1f 251
+  s_2eea0ee1da1f20::t_7c108e6c6467f7 32
+  s_2eea0ee1da1f20::t_eec3631c564bbe 179
+  s_2eea0ee1da1f20::t_0b72013eda3bda 137-138,148
+  s_2eea0ee1da1f20::t_fa0f6d8e411059 356-358
+  s_2eea0ee1da1f20::t_9f023c781ab18e 119
+  s_2eea0ee1da1f20::t_7e680df07d0875 210-233
+  s_2eea0ee1da1f20::t_bef4b77f86a0dd 250,256-257,260-267,275-288,291
+source/server/appleaccount.d
+  s_2eea0ee1da1f20::t_c9e5abd7ccd500 95,98
+  s_2eea0ee1da1f20::t_91ccd9c2c6c92a 227-230,242
+  s_2eea0ee1da1f20::t_03b4594ac54834 209,212-213,220
+  s_2eea0ee1da1f20::t_ef640809e271e1 78-82
+  s_2eea0ee1da1f20::t_dca4c53ea45b13 271,310,398
+  s_2eea0ee1da1f20::t_3da13d563f3482 434
+  s_2eea0ee1da1f20::t_e8499a2f866a2a 443,453-460,473,481-486
+  s_2eea0ee1da1f20::t_d32069493afc34 106,108-110
+  s_2eea0ee1da1f20::t_63a1b41e876676 130,137-139,141-143,147
+  s_2eea0ee1da1f20::t_91c44eea8024fc 36
+  s_2eea0ee1da1f20::t_919b0236afe26b 499
+  s_2eea0ee1da1f20::t_ce815bfe326801 518-519,523,525-528,531-532,535
+  s_2eea0ee1da1f20::t_6ab9f359909ffe 551,564-567,569-570,572-574
+source/app/persistence.d
+  s_2eea0ee1da1f20::t_ebc268a35696f3 180,190
+  s_2eea0ee1da1f20::t_0f7e6c27e5e0b0 395,400
+  s_2eea0ee1da1f20::t_832db6fa401cb5 138-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "3480fcd738f7fe535c23d50ef470064060242fdd",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
