@@ -26,10 +26,10 @@ jobs:
             os: 'ubuntu-22.04'
             native: false
 
-          - triple: 'aarch64-windows-msvc'
-            target: 'windows'
-            os: 'ubuntu-22.04'
-            native: false
+          # Note: aarch64-windows-msvc is intentionally omitted — the
+          # windows-headers dependency static-asserts "Unsupported CPU" on ARM64,
+          # so that target cannot be built until the dependency gains ARM64
+          # support. Windows x86_64 covers the vast majority of users.
 
           # macOS targets are built natively on macOS runners. Cross-linking
           # them from Linux with lld + an old SDK produces a Mach-O whose
@@ -101,6 +101,9 @@ jobs:
   macos-universal:
     name: Build macOS universal CLI
     needs: build
+    # Run as long as the macOS slices uploaded their artifacts, even if an
+    # unrelated matrix job (e.g. a Windows target) failed.
+    if: ${{ !cancelled() }}
     runs-on: macos-14
     steps:
       - uses: actions/download-artifact@v4

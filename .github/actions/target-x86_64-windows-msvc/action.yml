@@ -32,3 +32,18 @@ runs:
         EOF
         curl -LO https://github.com/ldc-developers/ldc/releases/download/v$LDC_VERSION/ldc2-$LDC_VERSION-windows-x64.7z
         7z x ./ldc2-$LDC_VERSION-windows-x64.7z -o$HOME
+
+        # lld-link is case-sensitive on Linux, but some D pragma(lib) directives
+        # use a capitalized name (e.g. Bcrypt.lib, pulled in by phobos' RNG) while
+        # the bundled MinGW import libs are all lowercase. Add capitalized-first
+        # aliases so those default-lib references resolve when cross-linking.
+        MINGW="$HOME/ldc2-$LDC_VERSION-windows-x64/lib/mingw"
+        if [ -d "$MINGW" ]; then
+            for f in "$MINGW"/*.lib; do
+                b=$(basename "$f")
+                cap="$(printf '%s' "${b%.lib}" | sed 's/^./\U&/').lib"
+                if [ "$cap" != "$b" ] && [ ! -e "$MINGW/$cap" ]; then
+                    ln -s "$b" "$MINGW/$cap"
+                fi
+            done
+        fi
