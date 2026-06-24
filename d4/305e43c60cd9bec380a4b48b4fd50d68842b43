@@ -1,0 +1,21 @@
+frontends/cli/source/apps.d
+  s_2557a0523a3216::t_b8191fafed304b 361-370
+frontends/cli/source/source.d
+  s_2557a0523a3216::t_4f01ff4341b686 328-336,339,341,348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "d4305e43c60cd9bec380a4b48b4fd50d68842b43",
+  "prompts": {},
+  "sessions": {
+    "s_2557a0523a3216": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0805d643-86b2-4ce7-8388-fe0a13bee588",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
