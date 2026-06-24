@@ -1,0 +1,45 @@
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_46d4f0fbdbdbcb 508-512
+  s_2eea0ee1da1f20::t_9c0c9c9abe167b 555-576
+  s_2eea0ee1da1f20::t_1a6deea1471ff2 48
+  s_2eea0ee1da1f20::t_4c6623388ec684 647-652
+  s_2eea0ee1da1f20::t_8f24bd91999c40 589-604
+frontends/cli/source/apps.d
+  s_2eea0ee1da1f20::t_12aeed98b6021b 131-140,146-148,150-152,156-159,169-178
+  s_2eea0ee1da1f20::t_116fc4aa7d8692 215-237
+  s_2eea0ee1da1f20::t_b1709146365266 371-398
+  s_2eea0ee1da1f20::t_a0da886143d083 16
+  s_2eea0ee1da1f20::t_7af523a640bd32 35-58
+  s_2eea0ee1da1f20::t_b6666e9d3e1ba7 18
+frontends/cli/source/install.d
+  s_2eea0ee1da1f20::t_39fae11870e1cd 59-62,64-65,68-71,73-94
+  s_2eea0ee1da1f20::t_9d6f53bf2bbb70 15
+frontends/cli/source/jsonout.d
+  s_2eea0ee1da1f20::t_701533a217ccfd 36
+  s_2eea0ee1da1f20::t_7223078e749de0 1-35,37-98
+frontends/cli/source/device.d
+  s_2eea0ee1da1f20::t_8221a3ae24f482 18-19,23
+  s_2eea0ee1da1f20::t_3d45129314e03f 63-75
+frontends/cli/source/team.d
+  s_2eea0ee1da1f20::t_174b64c2b25bca 57-72
+  s_2eea0ee1da1f20::t_4cdc26ee2ff419 15-16,20
+frontends/cli/source/app_id.d
+  s_2eea0ee1da1f20::t_6b41c549ca124a 62-86
+  s_2eea0ee1da1f20::t_8f82d46f7bb59e 16-17,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "f97ffcb3351745980004c721d2c849bfe4f660ea",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
