@@ -3,6 +3,7 @@ module certificate;
 import std.algorithm;
 import std.array;
 import std.exception;
+import std.json : JSONValue;
 import std.stdio;
 import std.sumtype;
 import std.typecons;
@@ -18,6 +19,7 @@ import argparse;
 import server.developersession;
 
 import cli_frontend;
+import jsonout;
 
 @(Command("cert").Description("Manage certificates."))
 struct CertificateCommand
@@ -56,6 +58,19 @@ struct ListCerts
         auto team = selectTeamInteractive(session, teamId);
 
         auto certificates = appleAccount.listAllDevelopmentCerts!iOS(team).unwrap();
+
+        if (g_jsonOutput) {
+            JSONValue[] arr;
+            foreach (certificate; certificates) {
+                arr ~= JSONValue([
+                    "name":         JSONValue(certificate.name),
+                    "serialNumber": JSONValue(certificate.serialNumber),
+                    "machineName":  JSONValue(certificate.machineName),
+                ]);
+            }
+            printJson(JSONValue(["certificates": JSONValue(arr)]));
+            return 0;
+        }
 
         writefln!"You have %d certificates registered."(certificates.length);
         writeln("Currently registered certificates:");
