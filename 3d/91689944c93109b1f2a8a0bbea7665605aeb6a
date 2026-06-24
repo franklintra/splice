@@ -1,0 +1,20 @@
+README.md
+  s_77800e7d0e602d::t_8a444f625ce745 103,105-106,111,113,116-118
+  s_77800e7d0e602d::t_1f005fbf385780 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "3d91689944c93109b1f2a8a0bbea7665605aeb6a",
+  "prompts": {},
+  "sessions": {
+    "s_77800e7d0e602d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae81dcd7-7b15-4727-9988-083b74e5c910",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
