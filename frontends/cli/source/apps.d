@@ -358,6 +358,16 @@ struct UninstallCommand
         if (known) {
             registry.remove(bundleId);
             saveInstalledRegistry(configurationPath, registry);
+            // Clean up the cached source IPA we kept around for refreshes (only
+            // ones under our `source-ipas` cache; never user-supplied IPAs).
+            if (record.sourceIpaPath.length) {
+                import std.algorithm.searching : canFind;
+                import std.file : exists, remove;
+                if (record.sourceIpaPath.canFind("source-ipas")) {
+                    try { if (exists(record.sourceIpaPath)) remove(record.sourceIpaPath); }
+                    catch (Exception) {}
+                }
+            }
             writefln!"App `%s` uninstalled and removed from the registry."(bundleId);
         } else {
             writefln!"App `%s` uninstalled (was not present in the registry)."(bundleId);

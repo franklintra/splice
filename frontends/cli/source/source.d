@@ -325,21 +325,27 @@ struct SourceInstall
             return 1;
         }
 
-        // Download the IPA to a temp file (streamed, with progress).
-        string tempIpa = configurationPath.buildPath(
-            "source-download-" ~ randomUUID().toString() ~ ".ipa");
-        scope (exit) removeQuietly(tempIpa);
+        // Download the IPA to a stable per-app cache path (NOT a temp file): the
+        // install records this path as the app's `sourceIpaPath`, and
+        // `refresh`/`daemon` re-open it to re-sign the app before its 7-day
+        // profile expires. A temp file deleted right after install could never
+        // be refreshed. `uninstall` cleans this cache up.
+        string ipaCacheDir = configurationPath.buildPath("source-ipas");
+        try { file.mkdirRecurse(ipaCacheDir); } catch (Exception) {}
+        string cachedIpa = ipaCacheDir.buildPath(bundleId ~ ".ipa");
+        removeQuietly(cachedIpa);
 
         try {
-            downloadIpa(latest.downloadURL, tempIpa, latest.size);
+            downloadIpa(latest.downloadURL, cachedIpa, latest.size);
         } catch (Exception e) {
+            removeQuietly(cachedIpa);
             log.errorF!"Could not download IPA: %s"(e.msg);
             return 1;
         }
 
         // From here on this mirrors `InstallCommand`: open the IPA, log in, pick
         // the team and device, then run the full sign+install flow.
-        Application application = openApp(tempIpa);
+        Application application = openApp(cachedIpa);
 
         auto session = makeSession();
         if (!session)
