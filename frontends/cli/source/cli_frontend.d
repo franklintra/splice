@@ -341,6 +341,7 @@ DeveloperTeam selectTeamInteractive(SideloaderSession session, string teamId)
 
 import account;
 import app_id;
+import apps;
 import certificate;
 import daemon;
 import device;
@@ -474,12 +475,15 @@ int entryPoint(Commands commands)
                 (DaemonCommand cmd) => cmd(),
                 (DeviceCommand cmd) => cmd(),
                 (InstallCommand cmd) => cmd(),
+                (ListCommand cmd) => cmd(),
                 (LoginAccountCommand cmd) => cmd(),
                 (LogoutCommand cmd) => cmd(),
+                (RefreshCommand cmd) => cmd(),
                 (SignCommand cmd) => cmd(),
                 (TrollsignCommand cmd) => cmd(),
                 (TeamCommand cmd) => cmd(),
                 (ToolCommand cmd) => cmd(),
+                (UninstallCommand cmd) => cmd(),
                 (VersionCommand cmd) => cmd(),
         );
     }
@@ -506,7 +510,7 @@ struct Commands
     string account = "";
 
     @SubCommands
-    SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, LoginAccountCommand, LogoutCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, VersionCommand) cmd;
+    SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, ListCommand, LoginAccountCommand, LogoutCommand, RefreshCommand, SignCommand, TrollsignCommand, TeamCommand, ToolCommand, UninstallCommand, VersionCommand) cmd;
 }
 
 mixin CLI!Commands.main!entryPoint;

@@ -32,6 +32,14 @@ void assertSuccess(T)(T err) {
         throw new iMobileDeviceException!T(err);
 }
 
+/// Thrown when the device reports an error while uninstalling an application via
+/// the installation proxy (see `InstallationProxyClient.uninstall`).
+class AppUninstallationException: Exception {
+    this(string error, string description, long detail, string file = __FILE__, int line = __LINE__) {
+        super(format!"Cannot uninstall the application from the device! %s: %s (%d)"(error, description, detail), file, line);
+    }
+}
+
 /// Ensures a C constructor that reported success actually produced a usable
 /// handle. Some libimobiledevice entry points can return success while leaving
 /// the out-handle null; proceeding with a null handle leads to a later crash, so
@@ -216,6 +224,61 @@ public class InstallationProxyClient {
         plist_t result;
         instproxy_browse(handle, options ? options.handle : null, &result).assertSuccess();
         return Plist.wrap(result);
+    }
+
+    /**
+     * Uninstalls the application with the given on-device application identifier.
+     *
+     * Mirrors the `install` wrapper: drives `instproxy_uninstall` in async mode
+     * (a status callback) and blocks on a `std.concurrency` handshake until the
+     * device reports either `Complete` or an error. `appId` is the identifier as
+     * seen ON THE DEVICE; for a Sideloader-installed app this is the mangled
+     * `<bundleId>.<teamId>` (see `sideloadFull`'s `mainAppIdStr`), not the
+     * original registry bundle id — the caller is responsible for mangling.
+     *
+     * Throws `AppUninstallationException` on a device-reported error.
+     */
+    public void uninstall(string appId, Plist clientOptions = null) {
+        import std.concurrency : Tid, thisTid, send, receive;
+
+        static struct CallbackData {
+            Tid parentTid;
+        }
+
+        auto data = new CallbackData(thisTid());
+        GC.addRoot(data);
+        scope(exit) GC.removeRoot(data);
+
+        instproxy_uninstall(handle, appId.toStringz(), clientOptions ? clientOptions.handle : null,
+            (command_c, status_c, userData) {
+                auto cbData = cast(CallbackData*) userData;
+                try {
+                    auto statusPlist = Plist.wrap(status_c, false);
+                    auto status = statusPlist.dict();
+                    if (auto statusEntry = "Status" in status) {
+                        if (statusEntry.str().native() == "Complete") {
+                            cbData.parentTid.send(cast(immutable(Exception)) null);
+                        }
+                        // Intermediate progress statuses are ignored: uninstall is
+                        // quick and the CLI does not need a progress bar for it.
+                    } else {
+                        auto errorPlist = "Error" in status;
+                        auto descriptionPlist = "ErrorDescription" in status;
+                        auto detailPlist = "ErrorDetail" in status;
+                        throw new AppUninstallationException(
+                            errorPlist ? errorPlist.str().native() : "(null)",
+                            descriptionPlist ? descriptionPlist.str().native() : "(null)",
+                            detailPlist ? cast(long) detailPlist.uinteger().native() : -1
+                        );
+                    }
+                } catch (Exception e) {
+                    cbData.parentTid.send(cast(immutable) e);
+                }
+            }, data).assertSuccess();
+
+        receive(
+            (immutable(Exception) e) { if (e !is null) throw cast() e; },
+        );
     }
 
     ~this() {
