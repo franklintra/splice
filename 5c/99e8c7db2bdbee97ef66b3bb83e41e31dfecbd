@@ -1,0 +1,22 @@
+.github/workflows/build-cli.yml
+  s_48c46507a92178::t_55f45a633b451d 29-32
+  s_48c46507a92178::t_9a927ab9e0da1e 104-106
+.github/actions/target-x86_64-windows-msvc/action.yml
+  s_48c46507a92178::t_998ef3f64a0669 35-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "5c99e8c7db2bdbee97ef66b3bb83e41e31dfecbd",
+  "prompts": {},
+  "sessions": {
+    "s_48c46507a92178": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23bd772b-c296-496f-8727-f05414d3e460",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
