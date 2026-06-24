@@ -1,0 +1,31 @@
+source/app/timeutil.d
+  s_2eea0ee1da1f20::t_25cefc48676bf7 1-121
+frontends/gtk/source/ui/manageinstalledappswindow.d
+  s_2eea0ee1da1f20::t_fa752b60c3dc1a 214-220
+  s_2eea0ee1da1f20::t_5c6c12fb6547ab 1-109,116-119,121-188,191-213,221-226
+  s_2eea0ee1da1f20::t_2b219508dcccaa 110-115,120
+  s_2eea0ee1da1f20::t_2b35a8b6b8a398 189-190
+frontends/cli/source/apps.d
+  s_2eea0ee1da1f20::t_f47eae4d0eb3c3 303-304
+  s_2eea0ee1da1f20::t_601e70372a24de 29,35-37
+frontends/gtk/source/ui/devicewidget.d
+  s_2eea0ee1da1f20::t_af7fe6d3402d56 27
+  s_2eea0ee1da1f20::t_d1433b1cc78628 65-71
+  s_2eea0ee1da1f20::t_557c86abdc3190 98-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "886834db07350c8136c107cb3ccf99ce220003f0",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
