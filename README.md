@@ -341,6 +341,43 @@ This functionality is also available through the generic tool runner
 (`sideloader tool list` / `tool run <index>`), which the first-class command
 reuses under the hood.
 
+## JIT enablement
+
+Some apps (emulators, interpreters, JS engines) need *just-in-time* compilation,
+which iOS only allows for a process the kernel has flagged `CS_DEBUGGED`.
+Attaching a debugger to a running app sets that flag; `sideloader jit` does this
+the same way SideJITServer / StikDebug / Jitterbug do — it connects to the
+on-device `com.apple.debugserver`, attaches to the already-running app, then
+immediately detaches, leaving the app running with JIT enabled.
+
+```sh
+# Enable JIT for an app that is ALREADY RUNNING on the connected device.
+sideloader jit com.example.app
+sideloader jit com.example.app --udid <UDID>   # if several devices are connected
+sideloader jit com.example.app --wifi          # prefer Wi-Fi when both are available
+```
+
+Prerequisites (the command reports a clear, actionable error if they are not
+met):
+
+* **Developer Mode** must be enabled on the device
+  (Settings → Privacy & Security → Developer Mode), and a **Developer Disk
+  Image** must be mounted — the `com.apple.debugserver` service only exists then.
+  The easiest way to mount it is to connect the device to Xcode once.
+* The target **app must already be running** in the foreground — JIT is enabled
+  for a *running* process; the command attaches to it, it does not launch it.
+
+You pass the *original* bundle id (or the on-device id); Sideloader resolves the
+app's executable name and accepts the mangled `<bundleId>.<teamId>` form it
+installs apps under. The command supports the global `--json` flag
+(`{"status":"ok","bundleId":…}` on success, `{"error":…}` on failure). With no
+device connected it prints a clear message and exits non-zero (it never crashes).
+
+> Note: JIT enablement is currently CLI-only. It is not yet exposed in the GTK
+> "Additional tools" menu, because that generic tool runner only hands a tool the
+> device — it has no way to ask the user *which* app to target — whereas JIT needs
+> a bundle id. Use the `jit` command above.
+
 ## Sources (AltStore-style catalogs)
 
 `sideloader source` lets you subscribe to AltStore / SideStore *sources* (JSON
@@ -383,6 +420,7 @@ the first match and warns you; pass `--source` to disambiguate.
 - Sideload
 - Sign IPAs
 - Set-up SideStore's pairing file
+- Enable JIT for a running app (`sideloader jit <bundle-id>`)
 - Manage App IDs and certificates for free developer accounts.
 - iOS version range is unknown. 32-bit support is untested. Please report any issue here!!
 

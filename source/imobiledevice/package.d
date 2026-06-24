@@ -1,6 +1,7 @@
 module imobiledevice;
 
 public import imobiledevice.afc;
+public import imobiledevice.debugserver;
 public import imobiledevice.house_arrest;
 public import imobiledevice.installation_proxy;
 public import imobiledevice.libimobiledevice;
@@ -658,6 +659,95 @@ public class HouseArrestClient {
     ~this() {
         if (handle) { // it may be null if an exception has been thrown TODO: switch from a constructor to a static function to fix that.
             house_arrest_client_free(handle).assertSuccess();
+        }
+    }
+}
+
+/// Thrown when the on-device `com.apple.debugserver` service cannot be started.
+///
+/// This is the overwhelmingly common JIT failure: the service only exists once a
+/// Developer Disk Image (DDI) is mounted / Developer Mode is enabled on the
+/// device. The message spells out the remediation so the CLI can surface it
+/// verbatim.
+class DebugserverUnavailableException: Exception {
+    this(string detail, string file = __FILE__, int line = __LINE__) {
+        super(
+            "Could not start the on-device debugserver. " ~
+            "Enable Developer Mode (Settings > Privacy & Security > Developer Mode) and make sure a " ~
+            "Developer Disk Image is mounted (connect the device to Xcode once, or run a tool that mounts " ~
+            "the personalized DDI). " ~ detail,
+            file, line);
+    }
+}
+
+/**
+ * Thin D wrapper over libimobiledevice's debugserver client (the GDB-remote /
+ * RSP transport to the on-device `com.apple.debugserver`).
+ *
+ * Mirrors the other client wrappers: the constructor starts the service through
+ * lockdownd and throws on failure; `~this` frees the handle. The extra surface
+ * here is the RSP plumbing JIT enablement needs: `setAckMode` (to flip into
+ * no-ack mode after `QStartNoAckMode`) and `sendCommand`, which builds a
+ * `debugserver_command_t`, sends it, and returns the raw RSP response string.
+ *
+ * NOTE: starting `com.apple.debugserver` only succeeds when a Developer Disk
+ * Image is mounted / Developer Mode is on; otherwise the constructor throws a
+ * `DebugserverUnavailableException` with the remediation steps.
+ */
+public class DebugserverClient {
+    debugserver_client_t handle;
+
+    public this(iDevice device, string label = "sideloader.jit") {
+        auto err = debugserver_client_start_service(device.handle, &handle, label.toStringz());
+        if (err != debugserver_error_t.DEBUGSERVER_E_SUCCESS)
+            throw new DebugserverUnavailableException(format!"(debugserver error %s)"(err));
+        handle.assertHandle("DebugserverClient");
+    }
+
+    /**
+     * Enables or disables libimobiledevice's internal ACK-mode handling. After
+     * the target accepts `QStartNoAckMode`, both sides stop sending the `+`/`-`
+     * acknowledgements, so we disable it here to keep the conversation in sync.
+     */
+    public void setAckMode(bool enabled) {
+        debugserver_client_set_ack_mode(handle, enabled ? 1 : 0).assertSuccess();
+    }
+
+    /// Sets the receive timeout (ms) for subsequent receives; negative = default.
+    public void setReceiveTimeout(int timeoutMs) {
+        debugserver_client_set_receive_timeout(handle, timeoutMs).assertSuccess();
+    }
+
+    /**
+     * Builds and sends one RSP command (`name` plus `args` tokens, which the
+     * library frames with `$...#<checksum>`), then returns the raw response with
+     * the framing already stripped by libimobiledevice. Throws on a transport
+     * error; an empty/`null` response is returned as `""`.
+     */
+    public string sendCommand(string name, string[] args) {
+        // libimobiledevice wants a NULL-terminated argv array of C strings.
+        const(char)*[] argv;
+        argv.reserve(args.length + 1);
+        foreach (a; args)
+            argv ~= a.toStringz();
+        argv ~= null;
+
+        debugserver_command_t command;
+        debugserver_command_new(name.toStringz(), cast(int) args.length,
+            args.length ? argv.ptr : null, &command).assertSuccess();
+        scope(exit) debugserver_command_free(command).assertSuccess();
+
+        char* response;
+        size_t responseSize;
+        debugserver_client_send_command(handle, command, &response, &responseSize).assertSuccess();
+        if (!response)
+            return "";
+        return cast(string) response[0 .. responseSize].idup;
+    }
+
+    ~this() {
+        if (handle) { // it may be null if an exception has been thrown TODO: switch from a constructor to a static function to fix that.
+            debugserver_client_free(handle).assertSuccess();
         }
     }
 }

@@ -444,6 +444,7 @@ import certificate;
 import daemon;
 import device;
 import install;
+import jit;
 import service;
 import sidestore;
 import sign;
@@ -618,6 +619,7 @@ int entryPoint(Commands commands)
                 (DaemonCommand cmd) => cmd(),
                 (DeviceCommand cmd) => cmd(),
                 (InstallCommand cmd) => cmd(),
+                (JITCommand cmd) => cmd(),
                 (ListCommand cmd) => cmd(),
                 (LoginAccountCommand cmd) => cmd(),
                 (LogoutCommand cmd) => cmd(),
@@ -663,7 +665,7 @@ struct Commands
     string account = "";
 
     @SubCommands
-    SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, ListCommand, LoginAccountCommand, LogoutCommand, RefreshCommand, ServiceCommand, SideStoreCommand, SignCommand, SourceCommand, TrollsignCommand, TeamCommand, ToolCommand, TweakCommand, UninstallCommand, VersionCommand) cmd;
+    SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, JITCommand, ListCommand, LoginAccountCommand, LogoutCommand, RefreshCommand, ServiceCommand, SideStoreCommand, SignCommand, SourceCommand, TrollsignCommand, TeamCommand, ToolCommand, TweakCommand, UninstallCommand, VersionCommand) cmd;
 }
 
 mixin CLI!Commands.main!entryPoint;
