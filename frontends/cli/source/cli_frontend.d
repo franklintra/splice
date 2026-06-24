@@ -124,8 +124,10 @@ string readPasswordLine(string prompt) {
 }
 
 /// Attempts an Apple login with the given credentials, wiring the interactive
-/// 2FA prompt. Returns the session on success, or `null` on failure.
-private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, string password, AnisetteProvider anisetteProvider = null) {
+/// 2FA prompt. Returns the session on success, or `null` on failure; on failure
+/// `errorOut` carries Apple's error so the caller can tell a definitive
+/// credential rejection apart from a transient/recoverable failure.
+private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, string password, out AppleLoginError errorOut, AnisetteProvider anisetteProvider = null) {
     auto log = getLogger();
     return DeveloperSession.login(
         device,
@@ -149,6 +151,7 @@ private DeveloperSession attemptLogin(Device device, ADI adi, string appleId, st
         (DeveloperSession session) => session,
         (AppleLoginError error) {
             log.errorF!"Can't log-in! %s (%d)"(error.description, error);
+            errorOut = error;
             return null;
         }
     );
@@ -183,18 +186,37 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
         }
 
         log.infoF!"Found stored credentials for %s, logging in silently..."(chosen.appleId);
-        if (auto session = attemptLogin(device, adi, chosen.appleId, chosen.password, anisetteProvider))
+        AppleLoginError silentError;
+        if (auto session = attemptLogin(device, adi, chosen.appleId, chosen.password, silentError, anisetteProvider))
             return session;
-        log.warnF!"Silent login with stored credentials for %s failed; removing them."(chosen.appleId);
 
-        // Drop just the failing account, keeping any others.
-        accounts = removeAccount(accounts, chosen.appleId);
-        if (accounts.length) {
-            if (storedDefault == chosen.appleId)
-                storedDefault = accounts[0].appleId;
-            kr.store(serializeAccounts(accounts, storedDefault));
+        // Only discard stored credentials when Apple definitively rejects them
+        // (the saved password is wrong). Transient or externally-recoverable
+        // failures — anisette/network hiccups, rate-limiting, a locked account,
+        // server-side errors — leave the saved password valid, so keep it:
+        // purging would force a needless interactive 2FA re-login and, under an
+        // unattended `daemon`/`service`, silently break auto-refresh forever.
+        if (silentError.code == AppleLoginErrorCode.invalidPassword) {
+            log.warnF!"Stored credentials for %s were rejected by Apple; removing them."(chosen.appleId);
+
+            // Drop just the failing account, keeping any others.
+            accounts = removeAccount(accounts, chosen.appleId);
+            if (accounts.length) {
+                if (storedDefault == chosen.appleId)
+                    storedDefault = accounts[0].appleId;
+                kr.store(serializeAccounts(accounts, storedDefault));
+            } else {
+                kr.clear();
+            }
         } else {
-            kr.clear();
+            log.warnF!"Silent login for %s failed (%s); keeping stored credentials to retry later."(chosen.appleId, silentError.description);
+            // Don't fall through to an interactive prompt for a transient failure:
+            // re-prompting can't fix a network/anisette/rate-limit problem, and an
+            // unattended run has no one to answer. Surface the failure instead.
+            if (!interactive) {
+                log.error("Could not log in with stored credentials (transient failure). Try again later.");
+                return null;
+            }
         }
     }
 
@@ -210,7 +232,8 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
     string appleId = readln().chomp();
     string password = readPasswordLine("Password: ");
 
-    auto session = attemptLogin(device, adi, appleId, password, anisetteProvider);
+    AppleLoginError interactiveError;
+    auto session = attemptLogin(device, adi, appleId, password, interactiveError, anisetteProvider);
     if (session) {
         // Persist (add/update) this account in the OS secure store and make it the
         // default, so subsequent runs don't have to prompt again.
