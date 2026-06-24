@@ -64,7 +64,7 @@ void injectTweaks(Application app, string[] tweakPaths) {
                 dylibsToInject ~= tweakPath;
                 break;
             case ".deb":
-                log.infoF!"Extracting tweak package `%s`..."(baseName(tweakPath));
+                log.debugF!"Extracting tweak package `%s`..."(baseName(tweakPath));
                 dylibsToInject ~= extractDebDylibs(tweakPath);
                 break;
             default:
@@ -89,7 +89,7 @@ void injectTweaks(Application app, string[] tweakPaths) {
         file.copy(dylibSource, destination);
         string installName = "@executable_path/Frameworks/" ~ dylibName;
         installNames ~= installName;
-        log.infoF!"Bundled tweak dylib `%s` (install name `%s`)."(dylibName, installName);
+        log.debugF!"Bundled tweak dylib `%s` (install name `%s`)."(dylibName, installName);
 
         warnAboutSubstrateDependency(destination, frameworksDir, log);
     }
@@ -149,7 +149,7 @@ private string[] extractDebDylibs(string debPath) {
     if (dylibs.length == 0) {
         log.warnF!"No dylibs found in `%s` (looked under data.tar)."(baseName(debPath));
     } else {
-        log.infoF!"Found %d dylib(s) in `%s`."(dylibs.length, baseName(debPath));
+        log.debugF!"Found %d dylib(s) in `%s`."(dylibs.length, baseName(debPath));
     }
 
     return dylibs;

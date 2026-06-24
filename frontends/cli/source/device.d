@@ -3,6 +3,7 @@ module device;
 import std.algorithm;
 import std.array;
 import std.exception;
+import std.format;
 import std.stdio;
 import std.sumtype;
 import std.typecons;
@@ -21,6 +22,7 @@ import server.developersession;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("device").Description("Manage registered devices."))
 struct DeviceCommand
@@ -73,11 +75,14 @@ struct ListDevices
             return 0;
         }
 
-        writefln!"You have %d devices registered."(devices.length);
-        writeln("Currently registered devices:");
+        note(format!"You have %d device%s registered."(devices.length, devices.length == 1 ? "" : "s"));
+
+        header("Currently registered devices");
+        Table table = Table([Column("Name"), Column("UDID"), Column("Identifier")]);
         foreach (device; devices) {
-            writefln!" - Device `%s` of UDID `%s` with the identifier `%s`"(device.name, device.deviceNumber, device.deviceId);
+            table.add(paint(device.name, Theme.accent), device.deviceNumber, device.deviceId);
         }
+        table.render();
 
         return 0;
     }

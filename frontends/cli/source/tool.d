@@ -18,8 +18,9 @@ import imobiledevice;
 import tools;
 
 import cli_frontend;
+import ui;
 
-@(Command("tool").Description("Run Sideloader's tools."))
+@(Command("tool").Description("Run Splice's tools."))
 struct ToolCommand
 {
     int opCall()
@@ -48,16 +49,24 @@ struct ListTools
 
         iDevice device = new iDevice(deviceId);
 
-        writeln("Available tools:");
+        header("Available tools");
         auto tools = toolList(device);
+        auto table = Table([Column("#"), Column("TOOL"), Column("STATUS")]);
         foreach (idx, tool; tools) {
             string diag = tool.diagnostic();
             if (diag == null) {
-                writefln!" - [%d] `%s` tool."(idx, tool.name);
+                table.add(
+                    paint(format!"%d"(idx), Theme.muted),
+                    paint(tool.name, Theme.accent),
+                    dot("available", Theme.ok));
             } else {
-                writefln!" - \033[9m\033[90m[%d] `%s` tool.\033[0m (unavailable: %s)"(idx, tool.name, diag);
+                table.add(
+                    paint(format!"%d"(idx), Theme.dim, Theme.muted),
+                    paint(tool.name, Theme.dim, Theme.muted),
+                    paint(format!"(unavailable) %s"(diag), Theme.dim, Theme.muted));
             }
         }
+        table.render();
 
         return 0;
     }

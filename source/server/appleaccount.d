@@ -232,7 +232,7 @@ package class AppleAccount {
     private static AppleLoginResponse login(ApplicationInformation applicationInformation, Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, uint attempt, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
 
-        log.info("Logging in...");
+        log.debug_("Logging in...");
 
         appleId = appleId.toLower();
 

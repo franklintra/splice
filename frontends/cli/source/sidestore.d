@@ -19,6 +19,7 @@ import tools;
 import tools.sidestorepairingfile;
 
 import cli_frontend;
+import ui;
 
 @(Command("sidestore").Description("First-class SideStore companion: detect SideStore and set up on-device refresh (pairing file)."))
 struct SideStoreCommand
@@ -80,15 +81,15 @@ struct SideStoreStatus
             return 1;
         }
 
-        writeln("SideStore is installed on this device.");
+        success("SideStore is installed on this device.");
         foreach (bundleId; tool.sideStoreBundles) {
             string ver = sideStoreVersion(tool.lockdowndClient, device, bundleId);
             if (ver.length)
-                writefln!" - %s (version %s)"(bundleId, ver);
+                field(bundleId, paint(format!"version %s"(ver), Theme.muted));
             else
-                writefln!" - %s"(bundleId);
+                field(bundleId, "");
         }
-        writeln("Run `sidestore pair` to set up the pairing file so SideStore can refresh apps on-device.");
+        note("Run `sidestore pair` to set up the pairing file so SideStore can refresh apps on-device.");
 
         return 0;
     }
@@ -149,10 +150,10 @@ struct SideStorePair
         string anisette = resolveSideStoreAnisette(device, anisetteServer);
         if (anisette.length) {
             writeln();
-            writefln!"Anisette server configured for Sideloader: %s"(anisette);
-            writeln("SideStore stores its anisette server in its own in-app settings, so it can't be");
-            writeln("pushed from here. Open SideStore -> Settings and set the anisette server to the");
-            writeln("URL above if you want SideStore to use the same one.");
+            field("Anisette server (Splice)", paint(anisette, Theme.accent));
+            note("SideStore stores its anisette server in its own in-app settings, so it can't be");
+            note("pushed from here. Open SideStore → Settings and set the anisette server to the");
+            note("URL above if you want SideStore to use the same one.");
         }
 
         return 0;

@@ -85,10 +85,10 @@ class DeveloperSession {
 
     static DeveloperLoginResponse login(Device device, ADI adi, string appleId, string password, TFAHandlerDelegate tfaHandler, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
-        log.infoF!"Creating DeveloperSession for %s..."(appleId);
+        log.debugF!"Creating DeveloperSession for %s..."(appleId);
         return AppleAccount.login(XcodeApplicationInformation, device, adi, appleId, password, tfaHandler, anisetteProvider).match!(
             (AppleAccount appleAccount) {
-                log.info("DeveloperSession created successfully.");
+                log.debug_("DeveloperSession created successfully.");
                 return DeveloperLoginResponse(new DeveloperSession(appleAccount));
             },
             (AppleLoginError err) {
@@ -106,7 +106,7 @@ class DeveloperSession {
     /// back to a full password login. No network calls beyond that probe.
     static DeveloperLoginResponse fromToken(Device device, ADI adi, string appleId, string adsid, string token, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
-        log.infoF!"Restoring DeveloperSession for %s from a stored token..."(appleId);
+        log.debugF!"Restoring DeveloperSession for %s from a stored token..."(appleId);
 
         // The URL bag is only consulted during SRP/2FA; authenticated developer
         // portal calls use fixed developerservices2 endpoints, so an empty bag
@@ -118,7 +118,7 @@ class DeveloperSession {
         try {
             return session.viewDeveloper().match!(
                 (None _) {
-                    log.info("Stored token accepted.");
+                    log.debug_("Stored token accepted.");
                     return DeveloperLoginResponse(session);
                 },
                 (DeveloperPortalError err) {
@@ -137,10 +137,10 @@ class DeveloperSession {
 
     static DeveloperLoginResponse login(Device device, ADI adi, string appleId, string password, NextLoginStepHandler nextStepHandler, AnisetteProvider anisetteProvider = null) {
         auto log = getLogger();
-        log.infoF!"Creating DeveloperSession for %s..."(appleId);
+        log.debugF!"Creating DeveloperSession for %s..."(appleId);
         return AppleAccount.login(XcodeApplicationInformation, device, adi, appleId, password, nextStepHandler, anisetteProvider).match!(
             (AppleAccount appleAccount) {
-                log.info("DeveloperSession created successfully.");
+                log.debug_("DeveloperSession created successfully.");
                 return DeveloperLoginResponse(new DeveloperSession(appleAccount));
             },
             (AppleLoginError err) {

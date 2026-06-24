@@ -1,7 +1,7 @@
 module jit;
 
 /**
- * `sideloader jit <bundle-id>` (issue #18): enable JIT for an already-running
+ * `splice jit <bundle-id>` (issue #18): enable JIT for an already-running
  * app on a connected device, SideJITServer / StikDebug style.
  *
  * PREREQUISITES (surfaced as clear errors at runtime):
@@ -13,6 +13,7 @@ module jit;
  * selects the device and reports success/failure (with `--json` support).
  */
 
+import std.format;
 import std.json : JSONValue;
 import std.stdio;
 
@@ -26,6 +27,7 @@ import sideload.jit;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("jit").Description("Enable JIT for an already-running app on the device (requires Developer Mode + a mounted Developer Disk Image)."))
 struct JITCommand
@@ -67,7 +69,7 @@ struct JITCommand
                 "bundleId": JSONValue(bundleId),
             ]));
         } else {
-            writefln!"JIT enabled for `%s`. The app can now use just-in-time compilation."(bundleId);
+            success(format!"JIT enabled for `%s`. The app can now use just-in-time compilation."(bundleId));
         }
         return 0;
     }

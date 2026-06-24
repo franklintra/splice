@@ -14,6 +14,7 @@ import sideload.coretrust;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("install").Description("Install an application on the device (renames the app, register the identifier, sign and install automatically)."))
 struct InstallCommand
@@ -79,7 +80,7 @@ struct InstallCommand
             log.errorF!"--permanent requires a vulnerable iOS (14.0-16.6.1), but this device reports `%s`."(
                 iosVersion.length ? iosVersion : "unknown");
             log.error("The CoreTrust bug (CVE-2023-41991) is patched on 16.7+ / 17.x / 18.x.");
-            log.error("Run `sideloader trollstore status` for details. Re-run without --permanent for a normal install.");
+            log.error("Run `splice trollstore status` for details. Re-run without --permanent for a normal install.");
             if (g_jsonOutput)
                 printJsonError("permanent install not available on this device");
             return 1;

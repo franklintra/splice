@@ -43,12 +43,12 @@ struct DaemonCommand
         auto log = getLogger();
 
         // Non-interactive by design: the daemon relies on credentials saved by a
-        // prior `sideloader login` (issue #5/#6). Leaving `interactive` false
+        // prior `splice login` (issue #5/#6). Leaving `interactive` false
         // means makeSession() will NOT prompt on stdin; if nothing is stored it
         // returns null and we tell the user to log in first.
         auto session = makeSession();
         if (!session) {
-            log.error("The daemon could not log in. Run `sideloader login` once to store credentials, then start the daemon again.");
+            log.error("The daemon could not log in. Run `splice login` once to store credentials, then start the daemon again.");
             return 1;
         }
 
@@ -88,7 +88,7 @@ struct DaemonCommand
             string transportWord = useNetwork ? "Wi-Fi" : "USB";
             try {
                 devices ~= new iDevice(entry.udid, preference);
-                log.infoF!"Device %s reachable via %s; refreshing over %s."(
+                log.debugF!"Device %s reachable via %s; refreshing over %s."(
                     entry.udid, entry.transportLabel, transportWord);
             } catch (Exception e) {
                 log.warnF!"Could not connect to device %s (%s): %s"(
@@ -99,7 +99,7 @@ struct DaemonCommand
         if (devices.length == 0) {
             log.info("No device connected over USB or Wi-Fi; nothing to refresh this pass.");
         } else {
-            log.infoF!"%d device(s) connected (USB and/or Wi-Fi)."(devices.length);
+            log.debugF!"%d device(s) connected (USB and/or Wi-Fi)."(devices.length);
         }
 
         auto now = Clock.currTime();
@@ -172,19 +172,19 @@ struct DaemonCommand
 
         // Refreshed: one line if a couple, summarised if many.
         if (refreshed.length == 1)
-            notify("Sideloader", format!"Refreshed %s"(refreshed[0]));
+            notify("Splice", format!"Refreshed %s"(refreshed[0]));
         else if (refreshed.length > 1)
-            notify("Sideloader", format!"Refreshed %d apps: %s"(refreshed.length, summarise(refreshed)));
+            notify("Splice", format!"Refreshed %d apps: %s"(refreshed.length, summarise(refreshed)));
 
         if (failed.length == 1)
-            notify("Sideloader: refresh failed", format!"Failed to refresh %s"(failed[0]));
+            notify("Splice: refresh failed", format!"Failed to refresh %s"(failed[0]));
         else if (failed.length > 1)
-            notify("Sideloader: refresh failed", format!"Failed to refresh %d apps: %s"(failed.length, summarise(failed)));
+            notify("Splice: refresh failed", format!"Failed to refresh %d apps: %s"(failed.length, summarise(failed)));
 
         if (expiring.length == 1)
-            notify("Sideloader: connect your device", format!"%s — no device connected to refresh."(expiring[0]));
+            notify("Splice: connect your device", format!"%s — no device connected to refresh."(expiring[0]));
         else if (expiring.length > 1)
-            notify("Sideloader: connect your device", format!"%d apps need refreshing but no device is connected: %s"(expiring.length, summarise(expiring)));
+            notify("Splice: connect your device", format!"%d apps need refreshing but no device is connected: %s"(expiring.length, summarise(expiring)));
     }
 
     /// Joins up to 3 names, appending "and N more" beyond that, to stay tasteful.
@@ -206,13 +206,13 @@ struct DaemonCommand
             policy.pollInterval, policy.threshold);
 
         while (true) {
-            log.info("Refresh cycle starting...");
+            log.debug_("Refresh cycle starting...");
             try {
                 runOnce(session, policy);
             } catch (Exception e) {
                 log.errorF!"Refresh cycle failed: %s"(e.msg);
             }
-            log.infoF!"Refresh cycle complete; sleeping %s."(policy.pollInterval);
+            log.debugF!"Refresh cycle complete; sleeping %s."(policy.pollInterval);
             Thread.sleep(policy.pollInterval);
         }
     }

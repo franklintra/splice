@@ -3,6 +3,7 @@ module app_id;
 import std.algorithm;
 import std.array;
 import std.exception;
+import std.format;
 import file = std.file;
 import std.stdio;
 import std.sumtype;
@@ -19,6 +20,7 @@ import server.developersession;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("app-id").Description("Manage App IDs."))
 struct AppIdCommand
@@ -84,7 +86,7 @@ struct ListAppIds
             return 0;
         }
 
-        writefln!"You have %d App IDs available out of the %d you have at your disposal."(appIds.availableQuantity, appIds.maxQuantity);
+        note(format!"You have %d App ID%s available out of the %d you have at your disposal."(appIds.availableQuantity, appIds.availableQuantity == 1 ? "" : "s", appIds.maxQuantity));
 
         // Surface when the next App ID slot frees up (the earliest expiration
         // among the existing App IDs). Especially relevant when the quota is
@@ -93,16 +95,18 @@ struct ListAppIds
             import app.persistence : appIdResetDate;
             auto resetDate = appIdResetDate(appIds.appIds.map!((appId) => appId.expirationDate).array());
             if (appIds.availableQuantity == 0) {
-                writefln!"Quota exhausted. The next App ID slot frees up on %s."(resetDate);
+                warning(format!"Quota exhausted. The next App ID slot frees up on %s."(resetDate));
             } else {
-                writefln!"The next App ID slot frees up on %s."(resetDate);
+                note(format!"The next App ID slot frees up on %s."(resetDate));
             }
         }
 
-        writeln("Currently registered App IDs:");
+        header("Currently registered App IDs");
+        Table table = Table([Column("Identifier"), Column("App"), Column("Expires")]);
         foreach (appId; appIds.appIds) {
-            writefln!" - `%s` for the app `%s`, expiring on %s."(appId.identifier, appId.name, appId.expirationDate);
+            table.add(paint(appId.identifier, Theme.accent), appId.name, format!"%s"(appId.expirationDate));
         }
+        table.render();
 
         return 0;
     }
@@ -229,7 +233,7 @@ struct DownloadProvision
 
         enforce(matchingAppIds.length == 1, "Multiple App ID matched?? To prevent any issue, ignoring the request.");
 
-        log.info("Downloading the profile...");
+        log.debug_("Downloading the profile...");
         file.write(outputPath, appleAccount.downloadTeamProvisioningProfile!iOS(team, matchingAppIds[0]).unwrap().encodedProfile);
         log.info("Done.");
 

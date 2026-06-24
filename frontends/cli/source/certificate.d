@@ -3,6 +3,7 @@ module certificate;
 import std.algorithm;
 import std.array;
 import std.exception;
+import std.format;
 import std.json : JSONValue;
 import std.stdio;
 import std.sumtype;
@@ -20,6 +21,7 @@ import server.developersession;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("cert").Description("Manage certificates."))
 struct CertificateCommand
@@ -72,17 +74,20 @@ struct ListCerts
             return 0;
         }
 
-        writefln!"You have %d certificates registered."(certificates.length);
-        writeln("Currently registered certificates:");
+        note(format!"You have %d certificate%s registered."(certificates.length, certificates.length == 1 ? "" : "s"));
+
+        header("Currently registered certificates");
+        Table table = Table([Column("Name"), Column("Serial number"), Column("Machine")]);
         foreach (certificate; certificates) {
-            writefln!" - `%s` with the serial number `%s`, from the machine named `%s`."(certificate.name, certificate.serialNumber, certificate.machineName);
+            table.add(paint(certificate.name, Theme.accent), certificate.serialNumber, certificate.machineName);
         }
+        table.render();
 
         return 0;
     }
 }
 
-// @(Command("register").Description("Register a certificate for Sideloader if we don't already have one."))
+// @(Command("register").Description("Register a certificate for Splice if we don't already have one."))
 
 @(Command("submit").Description("Submit a certificate signing request to Apple servers."))
 struct SubmitCert

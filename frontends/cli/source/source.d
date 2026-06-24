@@ -1,7 +1,7 @@
 module sources;
 
 /**
- * `sideloader source <add|remove|list|browse|install>` (#17).
+ * `splice source <add|remove|list|browse|install>` (#17).
  *
  * Manages subscriptions to AltStore-style JSON sources (catalogs / repos) and
  * lets the user browse and install apps from them without manually downloading
@@ -42,6 +42,7 @@ import app.session : systemConfigurationPath;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("source").Description("Manage AltStore-style sources (catalogs) and install apps from them."))
 struct SourceCommand
@@ -176,21 +177,21 @@ struct SourceList
         }
 
         if (state.sources.length == 0) {
-            writeln("No sources subscribed. Add one with `sideloader source add <url>`.");
+            note("No sources subscribed. Add one with `splice source add <url>`.");
             return 0;
         }
 
-        writefln!"%d source(s) subscribed:"(state.sources.length);
+        header(format!"%d source(s) subscribed"(state.sources.length));
         foreach (url; state.sources) {
             if (names) {
                 try {
                     auto src = fetchSource(url);
-                    writefln!" - %s (%d app(s)): %s"(src.name, src.apps.length, url);
+                    note(format!"%s (%d app(s)): %s"(src.name, src.apps.length, url));
                 } catch (SourceException e) {
-                    writefln!" - %s (unreachable: %s)"(url, e.msg);
+                    note(format!"%s (unreachable: %s)"(url, e.msg));
                 }
             } else {
-                writefln!" - %s"(url);
+                note(url);
             }
         }
         return 0;
@@ -245,19 +246,19 @@ struct SourceBrowse
                 if (!matchesSearch(app, needle))
                     continue;
                 if (!printedHeader) {
-                    writefln!"# %s"(src.name.length ? src.name : src.identifier);
+                    header(src.name.length ? src.name : src.identifier);
                     printedHeader = true;
                 }
                 auto latest = latestVersion(app);
-                writefln!" - %s (%s) v%s — %s"(
+                note(format!"%s (%s) v%s — %s"(
                     app.name, app.bundleIdentifier,
                     latest.version_.length ? latest.version_ : "?",
-                    app.developerName.length ? app.developerName : "unknown");
+                    app.developerName.length ? app.developerName : "unknown"));
                 shown++;
             }
         }
         if (shown == 0)
-            writeln("No apps found.");
+            note("No apps found.");
         return 0;
     }
 }
@@ -293,7 +294,7 @@ struct SourceInstall
 
         auto sourcesToSearch = resolveSources(state, this.source, log);
         if (sourcesToSearch.length == 0) {
-            log.error("No sources to search. Add one with `sideloader source add <url>`.");
+            log.error("No sources to search. Add one with `splice source add <url>`.");
             return 1;
         }
 
@@ -453,7 +454,7 @@ private bool matchesSearch(SourceApp app, string needle)
 private void downloadIpa(string url, string destPath, long advertisedSize)
 {
     auto log = getLogger();
-    log.infoF!"Downloading %s ..."(url);
+    log.debugF!"Downloading %s ..."(url);
 
     Request request = Request();
     request.sslSetVerifyPeer(true);
@@ -487,5 +488,5 @@ private void downloadIpa(string url, string destPath, long advertisedSize)
     if (progressBar !is null)
         progressBar.finish();
 
-    log.info("Download completed.");
+    log.debug_("Download completed.");
 }

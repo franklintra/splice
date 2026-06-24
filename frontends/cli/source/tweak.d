@@ -20,6 +20,7 @@ import sideload.tweak;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("tweak").Description(
     "Inject tweaks (.dylib or .deb) into an IPA before signing. "

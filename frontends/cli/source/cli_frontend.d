@@ -46,6 +46,8 @@ import argparse;
 import app;
 import app.session;
 import jsonout;
+import clilog;
+static import ui;
 import keyring;
 import utils;
 
@@ -174,7 +176,7 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
 
     auto log = getLogger();
 
-    log.info("Logging in...");
+    log.debug_("Logging in...");
 
     auto kr = makeKeyring();
     string configurationPath = systemConfigurationPath();
@@ -200,17 +202,17 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
         // and is the whole point of token persistence — only a token Apple
         // rejects sends us down the password path below.
         if (chosen.adsid.length && chosen.token.length) {
-            log.infoF!"Found a stored session token for %s, restoring it..."(chosen.appleId);
+            log.debugF!"Found a stored session token for %s, restoring it..."(chosen.appleId);
             auto restored = DeveloperSession.fromToken(device, adi, chosen.appleId, chosen.adsid, chosen.token, anisetteProvider).match!(
                 (DeveloperSession session) => session,
                 (AppleLoginError _) => cast(DeveloperSession) null
             );
             if (restored !is null)
                 return restored;
-            log.infoF!"Stored token for %s is no longer valid; falling back to password login."(chosen.appleId);
+            log.debugF!"Stored token for %s is no longer valid; falling back to password login."(chosen.appleId);
         }
 
-        log.infoF!"Logging in silently with stored credentials for %s..."(chosen.appleId);
+        log.debugF!"Logging in silently with stored credentials for %s..."(chosen.appleId);
         AppleLoginError silentError;
         if (auto session = attemptLogin(device, adi, chosen.appleId, chosen.password, silentError, anisetteProvider)) {
             // Refresh the persisted token from this login so the next run can
@@ -250,12 +252,11 @@ DeveloperSession login(Device device, ADI adi, bool interactive, AnisetteProvide
     }
 
     if (!interactive) {
-        log.error("You are not logged in. (use `sidestore login` to log-in, or add `-i` to make us ask you the account)");
+        log.error("You are not logged in. (use `splice login` to log in, or add `-i` to make us ask you for the account)");
         return null;
     }
 
-    log.info("Please enter your account informations. They will only be sent to Apple servers.");
-    log.info("See it for yourself at https://github.com/Dadoum/Sideloader/");
+    log.info("Please enter your account information. It is only ever sent to Apple's servers.");
 
     write("Apple ID: ");
     string appleId = readln().chomp();
@@ -350,9 +351,12 @@ DeveloperTeam selectTeamInteractive(SideloaderSession session, string teamId)
         return team;
 
     // Several teams and no usable default: present a numbered picker.
-    writeln("You belong to several development teams. Please choose one:");
+    ui.header("Select a development team");
     foreach (i, t; teams) {
-        writefln!"  [%d] %s (ID: %s)"(i + 1, t.name, t.teamId);
+        writefln("  %s  %s   %s",
+            ui.paint(format!"[%d]"(i + 1), ui.Theme.accent, ui.Theme.bold),
+            ui.paint(t.name, ui.Theme.bold),
+            ui.paint(format!"ID: %s"(t.teamId), ui.Theme.muted));
     }
 
     size_t choice;
@@ -374,7 +378,7 @@ DeveloperTeam selectTeamInteractive(SideloaderSession session, string teamId)
         }
         if (choice >= 1 && choice <= teams.length)
             break;
-        writeln("Invalid selection, please try again.");
+        ui.warning("Invalid selection, please try again.");
     }
 
     team = teams[choice - 1];
@@ -439,7 +443,7 @@ iDevice selectConnectedDevice(string requestedUdid, bool preferNetwork,
     transportLabel = selection.device.transportLabel;
 
     string transportWord = selection.connType == iDeviceConnectionType.network ? "Wi-Fi" : "USB";
-    log.infoF!"Connecting to %s over %s (reachable via %s)."(
+    log.debugF!"Connecting to %s over %s (reachable via %s)."(
         chosenUdid, transportWord, transportLabel);
 
     bool useNetwork = selection.connType == iDeviceConnectionType.network;
@@ -535,7 +539,7 @@ mixin template LoginCommand()
         string anisetteServer = resolveAnisetteServer(configurationPath);
 
         if (anisetteServer.length) {
-            getLogger().infoF!"Using remote anisette server: %s"(anisetteServer);
+            getLogger().debugF!"Using remote anisette server: %s"(anisetteServer);
             // Remote anisette: no Android libraries / ADI provisioning needed.
             auto device = app.initializeDevice(configurationPath);
             auto provider = cast(AnisetteProvider) new RemoteAnisetteProvider(anisetteServer);
@@ -646,13 +650,19 @@ int entryPoint(Commands commands)
     // Surface the `--json` flag to commands (mirrors g_anisetteServer below).
     g_jsonOutput = commands.json;
 
+    // Resolve coloured output now that g_jsonOutput is known: off under --json,
+    // --no-color, NO_COLOR, or when stdout is not a TTY (see ui.initColor).
+    ui.initColor(commands.noColor);
+
     if (commands.json) {
         // In --json mode stdout is reserved for the JSON document, so route ALL
         // log levels (incl. INFO/DEBUG/TRACE, which the default handler sends to
         // stdout) to stderr instead. Logs stay visible for debugging.
         configureLoggingProvider(makeStderrProvider(rootLevel));
     } else {
-        configureLoggingProvider(new shared DefaultProvider(true, rootLevel));
+        // Human mode: lean, themed log lines (no logger-name/timestamp/level
+        // noise); full default format kicks in under -d/--debug. See clilog.
+        configureLoggingProvider(makeCleanProvider(rootLevel, ui.colorEnabled()));
     }
 
     // Surface the chosen anisette server to the (commands-unaware) makeSession path.
@@ -714,6 +724,9 @@ struct Commands
 
     @(NamedArgument("account").Description("Apple ID to use when several accounts are stored (defaults to the saved default account)."))
     string account = "";
+
+    @(NamedArgument("no-color").Description("Disable coloured output (also auto-disabled when piped, under NO_COLOR, or with --json)."))
+    bool noColor = false;
 
     @SubCommands
     SumType!(AppIdCommand, CertificateCommand, DaemonCommand, DeviceCommand, InstallCommand, JITCommand, ListCommand, LoginAccountCommand, LogoutCommand, RefreshCommand, ServiceCommand, SideStoreCommand, SignCommand, SourceCommand, TrollsignCommand, TrollStoreCommand, TeamCommand, ToolCommand, TweakCommand, UninstallCommand, VersionCommand) cmd;

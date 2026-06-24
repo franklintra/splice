@@ -15,6 +15,7 @@ import sideload.certificateidentity;
 import sideload.sign: sideloadSign = sign;
 
 import cli_frontend;
+import ui;
 
 @(Command("sign").Description("Sign an application bundle."))
 struct SignCommand
@@ -51,7 +52,7 @@ struct SignCommand
 
         double accumulator = 0;
 
-        log.infoF!"Signing %s..."(app.bundleName());
+        log.debugF!"Signing %s..."(app.bundleName());
         Bar progressBar = new Bar();
         double progress = 0;
         sideloadSign(
@@ -79,7 +80,7 @@ struct TrollsignCommand
     int opCall()
     {
         auto log = getLogger();
-        log.infoF!"Trollsigning %s"(executablePath);
+        log.debugF!"Trollsigning %s"(executablePath);
 
         import file = std.file;
         import sideload.ct_bypass;

@@ -43,7 +43,7 @@ class SideStoreTool: Tool {
 
     override void run(bool delegate(string message, bool canCancel = true) notify) {
         auto log = getLogger();
-        log.info("Placing SideStore pairing file.");
+        log.debug_("Placing SideStore pairing file.");
 
         assert(diagnostic() == null);
         {

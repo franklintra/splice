@@ -21,7 +21,7 @@ struct ProvisioningData {
 bool downloadAndInstallDeps(string configurationPath, bool delegate(float progress) downloadCallback) {
     auto log = getLogger();
 
-    log.info("Downloading APK...");
+    log.debug_("Downloading APK...");
     Request request = Request();
     request.sslSetVerifyPeer(false);
     request.useStreaming = true;
@@ -80,7 +80,7 @@ Device initializeDevice(string configurationPath) {
     auto device = new Device(configurationPath.buildPath("device.json"));
 
     if (!device.initialized) {
-        log.info("Creating device...");
+        log.debug_("Creating device...");
 
         import std.digest;
         import std.random;
@@ -91,7 +91,7 @@ Device initializeDevice(string configurationPath) {
         device.uniqueDeviceIdentifier = randomUUID().toString().toUpper();
         device.adiIdentifier = (cast(ubyte[]) rndGen.take(2).array()).toHexString().toLower();
         device.localUserUUID = (cast(ubyte[]) rndGen.take(8).array()).toHexString().toUpper();
-        log.info("Device created successfully.");
+        log.debug_("Device created successfully.");
     }
     log.debug_("Device OK.");
     return device;
@@ -106,11 +106,11 @@ ProvisioningData initializeADI(string configurationPath) {
     adi.identifier = device.adiIdentifier;
 
     if (!adi.isMachineProvisioned(-2)) {
-        log.info("Provisioning device...");
+        log.debug_("Provisioning device...");
 
         ProvisioningSession provisioningSession = new ProvisioningSession(adi, device);
         provisioningSession.provision(-2);
-        log.info("Device provisioned successfully.");
+        log.debug_("Device provisioned successfully.");
     }
     log.debug_("Provisioning OK.");
 

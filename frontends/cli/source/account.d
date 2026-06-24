@@ -3,6 +3,7 @@ module account;
 import std.algorithm;
 import std.array;
 import std.exception;
+import std.format;
 import std.stdio;
 import std.sumtype;
 import std.typecons;
@@ -17,6 +18,7 @@ import keyring;
 import server.developersession;
 
 import cli_frontend;
+import ui;
 
 @(Command("login").Description("Log in to your Apple account."))
 struct LoginAccountCommand
@@ -35,7 +37,7 @@ struct LoginAccountCommand
         interactive = true;
 
         if (force) {
-            log.info("Clearing stored credentials before logging in...");
+            log.debug_("Clearing stored credentials before logging in...");
             makeKeyring().clear();
         }
 
@@ -45,14 +47,16 @@ struct LoginAccountCommand
         }
         auto appleAccount = session.developerSession;
 
-        writefln!"You are now logged in as `%s`."(appleAccount.appleId);
+        success(format!"You are now logged in as `%s`."(appleAccount.appleId));
 
         auto teams = appleAccount.listTeams().unwrap();
         if (teams.length) {
-            writeln("Teams:");
+            header("Teams");
+            Table table = Table([Column("Name"), Column("Team ID")]);
             foreach (team; teams) {
-                writefln!" - `%s`, with ID `%s`."(team.name, team.teamId);
+                table.add(paint(team.name, Theme.accent), team.teamId);
             }
+            table.render();
         }
 
         return 0;

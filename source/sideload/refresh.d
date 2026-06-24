@@ -180,7 +180,7 @@ RefreshResult refreshApp(
     scope(failure) application.cleanup();
 
     try {
-        log.infoF!"Refreshing %s (%s)..."(app.appName.length ? app.appName : app.bundleId, app.bundleId);
+        log.debugF!"Refreshing %s (%s)..."(app.appName.length ? app.appName : app.bundleId, app.bundleId);
         sideloadFull(configPath, device, developer, application, progress, false, app.teamId);
         log.infoF!"Refreshed %s."(app.bundleId);
         return RefreshResult.refreshed;

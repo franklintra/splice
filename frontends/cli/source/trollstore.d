@@ -15,6 +15,7 @@ import sideload.coretrust;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("trollstore").Description("TrollStore / CoreTrust permanent-install helpers (CVE-2023-41991)."))
 struct TrollStoreCommand
@@ -74,35 +75,36 @@ struct TrollStoreStatus
             return 0;
         }
 
-        writefln!"Device:      %s"(status.deviceName);
+        header("Device");
+        field("Device", status.deviceName);
         if (status.productType.length)
-            writefln!"Model:       %s"(status.productType);
-        writefln!"iOS version: %s"(status.iosVersion);
-        writeln();
+            field("Model", status.productType);
+        field("iOS version", status.iosVersion);
 
         if (status.bypassable) {
-            writeln("A PERMANENT install is AVAILABLE on this device.");
-            writeln("Its iOS version is vulnerable to the CoreTrust bug (CVE-2023-41991),");
-            writeln("which TrollStore 2 uses to install apps that:");
-            writeln("  - survive past the usual 7-day developer-certificate expiry,");
-            writeln("  - need no Apple ID and never have to be re-signed/refreshed.");
+            header("Permanent install");
+            success("A PERMANENT install is AVAILABLE on this device.");
+            note("Its iOS version is vulnerable to the CoreTrust bug (CVE-2023-41991),");
+            note("which TrollStore 2 uses to install apps that:");
+            note("  - survive past the usual 7-day developer-certificate expiry,");
+            note("  - need no Apple ID and never have to be re-signed/refreshed.");
+            header("Trade-offs / what you should understand first");
+            note("  - This relies on a now-PATCHED exploit; it only works because this");
+            note("    device is on a vulnerable iOS version (14.0 - 16.6.1).");
+            note("  - Updating iOS to 16.7 or later removes the vulnerability; already");
+            note("    installed permanent apps generally keep working, but you will not");
+            note("    be able to install new ones.");
+            note("  - A permanent app is NOT managed/renewed by Splice's refresh");
+            note("    daemon. You are responsible for understanding what you install.");
             writeln();
-            writeln("TRADE-OFFS / what you should understand first:");
-            writeln("  - This relies on a now-PATCHED exploit; it only works because this");
-            writeln("    device is on a vulnerable iOS version (14.0 - 16.6.1).");
-            writeln("  - Updating iOS to 16.7 or later removes the vulnerability; already");
-            writeln("    installed permanent apps generally keep working, but you will not");
-            writeln("    be able to install new ones.");
-            writeln("  - A permanent app is NOT managed/renewed by Sideloader's refresh");
-            writeln("    daemon. You are responsible for understanding what you install.");
-            writeln();
-            writeln("To use it, install with:  sideloader install --permanent <app.ipa>");
+            note("To use it, install with:  splice install --permanent <app.ipa>");
         } else {
-            writeln("A permanent install is NOT available on this device.");
-            writeln("The CoreTrust bug (CVE-2023-41991) only works on iOS/iPadOS 14.0 - 16.6.1.");
-            writeln("This device is either too old or on a patched iOS (16.7+ / 17.x / 18.x),");
-            writeln("so apps must be installed with a developer certificate and refreshed");
-            writeln("before they expire (~every 7 days).");
+            header("Permanent install");
+            warning("A permanent install is NOT available on this device.");
+            note("The CoreTrust bug (CVE-2023-41991) only works on iOS/iPadOS 14.0 - 16.6.1.");
+            note("This device is either too old or on a patched iOS (16.7+ / 17.x / 18.x),");
+            note("so apps must be installed with a developer certificate and refreshed");
+            note("before they expire (~every 7 days).");
         }
 
         return 0;

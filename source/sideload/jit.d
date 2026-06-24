@@ -232,7 +232,7 @@ void enableJIT(iDevice device, string bundleId) {
     // 3. Attach to the already-running app by executable name. The name is hex
     //    encoded and prefixed with ';' to form `vAttachName;<hex>`.
     string attachArg = executableNameToAttachArg(executableName);
-    log.infoF!"Attaching to `%s` to enable JIT..."(bundleId);
+    log.debugF!"Attaching to `%s` to enable JIT..."(bundleId);
     string reply = debugserver.sendCommand("vAttachName", [attachArg]);
     log.debugF!"Attach reply: %s"(reply);
 

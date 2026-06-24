@@ -3,6 +3,7 @@ module team;
 import std.algorithm;
 import std.array;
 import std.exception;
+import std.format;
 import std.stdio;
 import std.sumtype;
 import std.typecons;
@@ -18,6 +19,7 @@ import server.developersession;
 
 import cli_frontend;
 import jsonout;
+import ui;
 
 @(Command("team").Description("Manage teams."))
 struct TeamCommand
@@ -69,11 +71,16 @@ struct ListTeams
             return 0;
         }
 
-        writeln("Teams:");
+        header("Teams");
+        auto table = Table([Column("NAME"), Column("ID"), Column("")]);
         foreach (team; teams) {
             bool isDefault = state.defaultTeamId.length && team.teamId == state.defaultTeamId;
-            writefln!" - `%s`, with ID `%s`.%s"(team.name, team.teamId, isDefault ? " (default)" : "");
+            table.add(
+                paint(team.name, Theme.accent),
+                paint(team.teamId, Theme.muted),
+                isDefault ? dot("default", Theme.ok) : "");
         }
+        table.render();
 
         return 0;
     }
@@ -110,7 +117,7 @@ struct DefaultTeam
         state.defaultTeamId = teamId;
         saveState(session.configurationPath, state);
 
-        writefln!"Default team set to `%s` (ID: %s)."(matching[0].name, teamId);
+        success(format!"Default team set to %s (ID: %s)."(paint(matching[0].name, Theme.accent), paint(teamId, Theme.muted)));
         return 0;
     }
 }

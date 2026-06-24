@@ -132,9 +132,9 @@ void sideloadFull(
         if (appIdName.length == 0) {
             appIdName = bundle.bundleIdentifier;
         }
-        log.infoF!"Creating App ID `%s` for the bundle `%s`..."(appIdName, bundle.bundleIdentifier);
+        log.debugF!"Creating App ID `%s` for the bundle `%s`..."(appIdName, bundle.bundleIdentifier);
         developer.addAppId!iOS(team, bundle.bundleIdentifier, appIdName).unwrap();
-        log.info("OK.");
+        log.debug_("OK.");
     }
     listAppIdResponse = developer.listAppIds!iOS(team).unwrap();
     auto appIds = listAppIdResponse.appIds.filter!((appId) => bundlesWithAppID.canFind!((bundle) => appId.identifier == bundle.bundleIdentifier())).array();

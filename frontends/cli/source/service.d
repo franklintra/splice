@@ -1,10 +1,10 @@
 module service;
 
 /**
- * `sideloader service <install|uninstall|status>` (#11).
+ * `splice service <install|uninstall|status>` (#11).
  *
  * Generates and manages a per-user background service unit that periodically
- * runs `sideloader daemon --once` so installed free-account apps get re-signed
+ * runs `splice daemon --once` so installed free-account apps get re-signed
  * before their (~7 day) provisioning profile expires — without the user having
  * to keep a terminal open.
  *
@@ -28,6 +28,8 @@ import std.conv : to;
 import std.path : buildPath, expandTilde;
 import std.process : environment, execute, Config;
 import std.string : strip;
+
+import ui;
 import std.sumtype;
 import file = std.file;
 
@@ -189,7 +191,7 @@ string systemdService(string exePath, bool noNotify) pure @safe
         exec ~= " --no-notify";
     return
         "[Unit]\n" ~
-        "Description=Sideloader app refresh (re-sign apps before they expire)\n" ~
+        "Description=Splice app refresh (re-sign apps before they expire)\n" ~
         "\n" ~
         "[Service]\n" ~
         "Type=oneshot\n" ~
@@ -204,7 +206,7 @@ string systemdTimer(uint interval) pure @safe
 {
     return
         "[Unit]\n" ~
-        "Description=Periodic Sideloader app refresh\n" ~
+        "Description=Periodic Splice app refresh\n" ~
         "\n" ~
         "[Timer]\n" ~
         "OnBootSec=120\n" ~
@@ -343,12 +345,12 @@ version (OSX)
 
         if (!file.exists(path))
         {
-            writeln("Sideloader background service: NOT installed.");
+            writeln("Splice background service: " ~ dot("not installed", Theme.warn));
             writefln!"  (expected unit at %s)"(path);
             return 0;
         }
 
-        writeln("Sideloader background service: installed.");
+        writeln("Splice background service: " ~ dot("installed", Theme.ok));
         writefln!"  Unit: %s"(path);
 
         // Best-effort: ask launchctl whether it's currently loaded.
@@ -481,11 +483,11 @@ else version (linux)
         string timerPath = dir.buildPath(timerUnitName);
         if (!file.exists(timerPath))
         {
-            writeln("Sideloader background service: NOT installed.");
+            writeln("Splice background service: " ~ dot("not installed", Theme.warn));
             writefln!"  (expected unit at %s)"(timerPath);
             return 0;
         }
-        writeln("Sideloader background service: installed.");
+        writeln("Splice background service: " ~ dot("installed", Theme.ok));
         writefln!"  Units: %s"(dir);
         auto res = trySystemctl(["systemctl", "--user", "is-active", timerUnitName]);
         writefln!"  Timer active: %s"(res.length ? res : "unknown");
@@ -566,15 +568,15 @@ else version (Windows)
             auto res = execute(["schtasks", "/Query", "/TN", "Sideloader\\Refresh"], null, Config.none);
             if (res.status == 0)
             {
-                writeln("Sideloader background service: installed.");
+                writeln("Splice background service: " ~ dot("installed", Theme.ok));
                 writeln(res.output.strip());
             }
             else
-                writeln("Sideloader background service: NOT installed.");
+                writeln("Splice background service: " ~ dot("not installed", Theme.warn));
         }
         catch (Exception)
         {
-            writeln("Sideloader background service: unknown (could not query schtasks).");
+            writeln("Splice background service: " ~ dot("unknown", Theme.muted) ~ " (could not query schtasks).");
         }
         return 0;
     }
@@ -583,7 +585,7 @@ else
 {
     private int installService(uint, bool, string) { getLogger().error("Background service is not supported on this platform."); return 1; }
     private int uninstallService(string) { getLogger().error("Background service is not supported on this platform."); return 1; }
-    private int statusService(string) { writeln("Sideloader background service: unsupported on this platform."); return 0; }
+    private int statusService(string) { writeln("Splice background service: " ~ dot("unsupported on this platform", Theme.muted)); return 0; }
 }
 
 import std.stdio : writeln, writefln;
