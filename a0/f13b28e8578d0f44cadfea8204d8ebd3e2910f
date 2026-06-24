@@ -1,0 +1,39 @@
+source/imobiledevice/package.d
+  s_2eea0ee1da1f20::t_94465ae6d2041e 367-380
+  s_2eea0ee1da1f20::t_c817ea7e505114 76-319,365
+frontends/cli/source/daemon.d
+  s_2eea0ee1da1f20::t_58de1db6dc0ea1 38-40
+README.md
+  s_2eea0ee1da1f20::t_c259481b1d3a90 114-140
+frontends/cli/source/sidestore.d
+  s_2eea0ee1da1f20::t_070c8040fb7d9c 40-44,48
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_eda1ab6fcf6969 340-436
+frontends/cli/source/install.d
+  s_2eea0ee1da1f20::t_b2b3ed8996c859 30-32
+  s_2eea0ee1da1f20::t_989af8190e001a 54-57
+frontends/cli/source/tool.d
+  s_2eea0ee1da1f20::t_dfd9cd5ce0154f 77-79
+  s_2eea0ee1da1f20::t_f8b6ac39ef793b 45-47
+frontends/cli/source/apps.d
+  s_2eea0ee1da1f20::t_3e1def6e36e469 150-152
+  s_2eea0ee1da1f20::t_23b45a77823ea1 132-134
+  s_2eea0ee1da1f20::t_4872626d89d64e 338-340
+  s_2eea0ee1da1f20::t_c08f458043212b 275-277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "a0f13b28e8578d0f44cadfea8204d8ebd3e2910f",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
