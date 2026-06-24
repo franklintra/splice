@@ -1,0 +1,35 @@
+frontends/cli/source/cli_frontend.d
+  s_2eea0ee1da1f20::t_acaa1e13ca96bf 450
+  s_2eea0ee1da1f20::t_d007bc6c8db0fb 628
+  s_2eea0ee1da1f20::t_fb872a370d0b73 666
+frontends/cli/source/source.d
+  s_2eea0ee1da1f20::t_1ac1752fa689d0 331
+  s_2eea0ee1da1f20::t_522df6ba0ef1e9 1-330,332-427,435-485
+  s_2eea0ee1da1f20::t_6ac6acc53ead72 428-434
+README.md
+  s_2eea0ee1da1f20::t_46ea18ad747f25 344-380
+source/app/sources.d
+  s_2eea0ee1da1f20::t_5ca381239c8d20 1-198,201-368
+  s_2eea0ee1da1f20::t_7a1316585463b7 199-200
+source/app/persistence.d
+  s_2eea0ee1da1f20::t_57e0c2cf8f4a05 475-483
+  s_2eea0ee1da1f20::t_a32fa62ebc0dad 497-499,507-518
+  s_2eea0ee1da1f20::t_58314efd677ddb 213,226-228
+  s_2eea0ee1da1f20::t_5dae1c3f74ac16 145-169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "1e343f72f303d2242fc116a517c1ece1ebc3e3ed",
+  "prompts": {},
+  "sessions": {
+    "s_2eea0ee1da1f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "917d12a9-034d-4c26-a9de-a6a797e41ebb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
