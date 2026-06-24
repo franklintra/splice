@@ -12,9 +12,12 @@ import slf4d.default_provider;
 
 import argparse;
 
+import std.json : JSONValue;
+
 import server.developersession;
 
 import cli_frontend;
+import jsonout;
 
 @(Command("team").Description("Manage teams."))
 struct TeamCommand
@@ -50,8 +53,23 @@ struct ListTeams
 
         auto state = loadState(session.configurationPath);
 
-        writeln("Teams:");
         auto teams = appleAccount.listTeams().unwrap();
+
+        if (g_jsonOutput) {
+            JSONValue[] arr;
+            foreach (team; teams) {
+                bool isDefault = state.defaultTeamId.length && team.teamId == state.defaultTeamId;
+                arr ~= JSONValue([
+                    "teamId":  JSONValue(team.teamId),
+                    "name":    JSONValue(team.name),
+                    "default": JSONValue(isDefault),
+                ]);
+            }
+            printJson(JSONValue(["teams": JSONValue(arr)]));
+            return 0;
+        }
+
+        writeln("Teams:");
         foreach (team; teams) {
             bool isDefault = state.defaultTeamId.length && team.teamId == state.defaultTeamId;
             writefln!" - `%s`, with ID `%s`.%s"(team.name, team.teamId, isDefault ? " (default)" : "");

@@ -12,6 +12,7 @@ import sideload;
 import sideload.application;
 
 import cli_frontend;
+import jsonout;
 
 @(Command("install").Description("Install an application on the device (renames the app, register the identifier, sign and install automatically)."))
 struct InstallCommand
@@ -55,15 +56,42 @@ struct InstallCommand
         auto device = selectConnectedDevice(this.udid, wifi, chosenUdid, transportLabel);
         if (!device)
             return 1;
-        Bar progressBar = new Bar();
+
+        // In --json mode suppress the human progress bar (it writes to stdout);
+        // a structured result is printed once at the end.
+        Bar progressBar = g_jsonOutput ? null : new Bar();
         string message;
-        progressBar.message = () => message;
+        if (progressBar !is null)
+            progressBar.message = () => message;
         sideloadFull(configurationPath, device, appleAccount, app, (progress, action) {
             message = action;
-            progressBar.index = cast(int) (progress * 100);
-            progressBar.update();
+            if (progressBar !is null) {
+                progressBar.index = cast(int) (progress * 100);
+                progressBar.update();
+            }
         }, !singlethreaded, team.teamId);
-        progressBar.finish();
+        if (progressBar !is null)
+            progressBar.finish();
+
+        if (g_jsonOutput) {
+            import std.json : JSONValue;
+            import app.persistence : loadInstalledRegistry, InstalledApp;
+
+            // Surface the recorded expiry/bundle id from the registry that
+            // sideloadFull just updated, when available.
+            JSONValue[string] result = [
+                "status":   JSONValue("ok"),
+                "bundleId": JSONValue(app.bundleIdentifier()),
+            ];
+            auto registry = loadInstalledRegistry(configurationPath);
+            InstalledApp record;
+            if (registry.query(app.bundleIdentifier(), record)) {
+                result["expiryDate"] = JSONValue(record.expiryDate);
+                if (record.teamId.length)
+                    result["teamId"] = JSONValue(record.teamId);
+            }
+            printJson(JSONValue(result));
+        }
 
         return 0;
     }

@@ -13,9 +13,12 @@ import slf4d.default_provider;
 
 import argparse;
 
+import std.json : JSONValue;
+
 import server.developersession;
 
 import cli_frontend;
+import jsonout;
 
 @(Command("app-id").Description("Manage App IDs."))
 struct AppIdCommand
@@ -55,6 +58,31 @@ struct ListAppIds
         auto team = selectTeamInteractive(session, teamId);
 
         auto appIds = appleAccount.listAppIds!iOS(team).unwrap();
+
+        if (g_jsonOutput) {
+            import app.persistence : appIdResetDate;
+
+            JSONValue[] arr;
+            foreach (appId; appIds.appIds) {
+                arr ~= JSONValue([
+                    "identifier":      JSONValue(appId.identifier),
+                    "name":            JSONValue(appId.name),
+                    "expirationDate":  JSONValue(appId.expirationDate.toISOExtString()),
+                ]);
+            }
+
+            JSONValue[string] obj = [
+                "maxQuantity":       JSONValue(appIds.maxQuantity),
+                "availableQuantity": JSONValue(appIds.availableQuantity),
+                "appIds":            JSONValue(arr),
+            ];
+            if (appIds.appIds.length) {
+                auto resetDate = appIdResetDate(appIds.appIds.map!((appId) => appId.expirationDate).array());
+                obj["nextSlotFreesUp"] = JSONValue(resetDate.toISOExtString());
+            }
+            printJson(JSONValue(obj));
+            return 0;
+        }
 
         writefln!"You have %d App IDs available out of the %d you have at your disposal."(appIds.availableQuantity, appIds.maxQuantity);
 

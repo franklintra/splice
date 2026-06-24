@@ -15,9 +15,12 @@ import botan.filters.data_src;
 
 import argparse;
 
+import std.json : JSONValue;
+
 import server.developersession;
 
 import cli_frontend;
+import jsonout;
 
 @(Command("device").Description("Manage registered devices."))
 struct DeviceCommand
@@ -56,6 +59,19 @@ struct ListDevices
         auto team = selectTeamInteractive(session, teamId);
 
         auto devices = appleAccount.listDevices!iOS(team).unwrap();
+
+        if (g_jsonOutput) {
+            JSONValue[] arr;
+            foreach (device; devices) {
+                arr ~= JSONValue([
+                    "name": JSONValue(device.name),
+                    "udid": JSONValue(device.deviceNumber),
+                    "id":   JSONValue(device.deviceId),
+                ]);
+            }
+            printJson(JSONValue(["devices": JSONValue(arr)]));
+            return 0;
+        }
 
         writefln!"You have %d devices registered."(devices.length);
         writeln("Currently registered devices:");

@@ -13,8 +13,9 @@ module apps;
 
 import std.algorithm : filter, map;
 import std.array : array;
-import std.datetime : Clock, dur, Duration, SysTime;
+import std.datetime : Clock, DateTime, dur, Duration, SysTime;
 import std.format : format;
+import std.json : JSONValue;
 import std.stdio;
 
 import slf4d;
@@ -31,6 +32,30 @@ import app.timeutil : formatExpiryCountdown, parseExpiry;
 import sideload.refresh;
 
 import cli_frontend;
+import jsonout;
+
+// ---------------------------------------------------------------------------
+// JSON shapes (issue #15)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the `--json` object for one installed app (pure; unittested below).
+ *
+ * Shape: `{bundleId, appName, teamId, expiryDate, enabled, expiresIn}` where
+ * `expiresIn` is the same human countdown string the text view shows. `now` is
+ * threaded in so the rendering is deterministic and testable.
+ */
+JSONValue installedAppToJSON(InstalledApp app, SysTime now)
+{
+    return JSONValue([
+        "bundleId":   JSONValue(app.bundleId),
+        "appName":    JSONValue(app.appName.length ? app.appName : app.bundleId),
+        "teamId":     JSONValue(app.teamId),
+        "expiryDate": JSONValue(app.expiryDate),
+        "enabled":    JSONValue(app.enabled),
+        "expiresIn":  JSONValue(formatExpiryCountdown(parseExpiry(app.expiryDate), now)),
+    ]);
+}
 
 // Expiry countdown formatting now lives in the core (`app.timeutil`) so the GTK
 // app-management UI (#14) can share the exact same rendering. It is imported
@@ -103,21 +128,35 @@ struct RefreshCommand
         }
 
         if (targets.length == 0) {
-            writeln("No apps are due for refresh.");
+            if (g_jsonOutput) {
+                printJson(JSONValue([
+                    "status":    JSONValue("ok"),
+                    "refreshed": JSONValue(0),
+                    "failed":    JSONValue(0),
+                    "skipped":   JSONValue(0),
+                ]));
+            } else {
+                writeln("No apps are due for refresh.");
+            }
             return 0;
         }
 
         size_t refreshed, failed, skipped;
         foreach (ref app; targets) {
-            Bar progressBar = new Bar();
+            // In --json mode suppress the human progress bar (it writes to
+            // stdout); the structured summary is printed once at the end.
+            Bar progressBar = g_jsonOutput ? null : new Bar();
             string message;
-            progressBar.message = () => message;
-            scope(exit) progressBar.finish();
+            if (progressBar !is null)
+                progressBar.message = () => message;
+            scope(exit) if (progressBar !is null) progressBar.finish();
 
             auto result = refreshApp(configurationPath, session, device, app, (progress, action) {
                 message = action;
-                progressBar.index = cast(int)(progress * 100);
-                progressBar.update();
+                if (progressBar !is null) {
+                    progressBar.index = cast(int)(progress * 100);
+                    progressBar.update();
+                }
             });
 
             final switch (result) {
@@ -127,7 +166,16 @@ struct RefreshCommand
             }
         }
 
-        writefln!"Refresh summary: %d refreshed, %d failed, %d skipped."(refreshed, failed, skipped);
+        if (g_jsonOutput) {
+            printJson(JSONValue([
+                "status":    JSONValue(failed > 0 ? "error" : "ok"),
+                "refreshed": JSONValue(refreshed),
+                "failed":    JSONValue(failed),
+                "skipped":   JSONValue(skipped),
+            ]));
+        } else {
+            writefln!"Refresh summary: %d refreshed, %d failed, %d skipped."(refreshed, failed, skipped);
+        }
         return failed > 0 ? 1 : 0;
     }
 }
@@ -156,11 +204,6 @@ struct ListCommand
         string configurationPath = systemConfigurationPath();
         auto registry = loadInstalledRegistry(configurationPath);
 
-        if (registry.apps.length == 0) {
-            writeln("No apps are installed (the registry is empty).");
-            return 0;
-        }
-
         // Optional, non-fatal device cross-check.
         bool[string] onDevice;
         bool haveDeviceInfo = false;
@@ -169,6 +212,29 @@ struct ListCommand
         }
 
         auto now = Clock.currTime();
+
+        // --json: emit `{"apps":[...]}` (empty array when the registry is empty),
+        // so scripts always get a stable, parseable document.
+        if (g_jsonOutput) {
+            JSONValue[] apps;
+            foreach (app; registry.apps) {
+                auto obj = installedAppToJSON(app, now);
+                if (verify && haveDeviceInfo) {
+                    bool present = (app.bundleId in onDevice) !is null
+                        || ((app.bundleId ~ "." ~ app.teamId) in onDevice) !is null;
+                    obj["onDevice"] = JSONValue(present);
+                }
+                apps ~= obj;
+            }
+            printJson(JSONValue(["apps": JSONValue(apps)]));
+            return 0;
+        }
+
+        if (registry.apps.length == 0) {
+            writeln("No apps are installed (the registry is empty).");
+            return 0;
+        }
+
         writefln!"%d installed app(s):"(registry.apps.length);
         foreach (app; registry.apps) {
             string countdown = formatExpiryCountdown(parseExpiry(app.expiryDate), now);
@@ -302,3 +368,31 @@ struct UninstallCommand
 
 // The pure expiry-countdown unittest moved with the helper into
 // `source/app/timeutil.d`.
+
+unittest
+{
+    // installedAppToJSON builds the documented shape, falls back to the bundle id
+    // for a missing app name, and renders a deterministic countdown.
+    auto now = SysTime(DateTime(2026, 1, 1, 0, 0, 0));
+
+    InstalledApp app;
+    app.bundleId = "com.example.app";
+    app.teamId = "ABCDE12345";
+    app.appName = "Example";
+    app.expiryDate = (now + dur!"days"(3) + dur!"hours"(4)).toISOExtString();
+    app.enabled = false;
+
+    auto j = installedAppToJSON(app, now);
+    assert(j["bundleId"].str == "com.example.app");
+    assert(j["appName"].str == "Example");
+    assert(j["teamId"].str == "ABCDE12345");
+    assert(j["enabled"].boolean == false);
+    assert(j["expiresIn"].str == "expires in 3d 4h");
+
+    // Missing app name falls back to the bundle id.
+    InstalledApp noName;
+    noName.bundleId = "com.example.noname";
+    noName.appName = "";
+    auto j2 = installedAppToJSON(noName, now);
+    assert(j2["appName"].str == "com.example.noname");
+}

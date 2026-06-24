@@ -45,6 +45,7 @@ import argparse;
 
 import app;
 import app.session;
+import jsonout;
 import utils;
 
 version = X509;
@@ -504,6 +505,11 @@ mixin template LoginCommand()
 @(Command("version").Description("Print the version."))
 struct VersionCommand {
     int opCall() {
+        if (g_jsonOutput) {
+            import std.json : JSONValue;
+            printJson(JSONValue(["version": JSONValue(versionStr)]));
+            return 0;
+        }
         writeln(versionStr);
         return 0;
     }
@@ -546,6 +552,28 @@ int reExecWithHomebrewLibs()
     }
 }
 
+/**
+ * Resolves the effective slf4d log level for this invocation.
+ *
+ * Precedence: an explicit `--log-level <trace|debug|info|warn|error>` wins;
+ * otherwise `-d/--debug` maps to TRACE; otherwise INFO. An unrecognised
+ * `--log-level` value falls back to the debug/INFO behaviour (a warning is not
+ * logged here because the provider isn't configured yet).
+ */
+Level resolveLogLevel(string logLevel, bool debug_)
+{
+    switch (logLevel.strip().toLower())
+    {
+        case "trace": return Levels.TRACE;
+        case "debug": return Levels.DEBUG;
+        case "info":  return Levels.INFO;
+        case "warn":  return Levels.WARN;
+        case "error": return Levels.ERROR;
+        case "":      return debug_ ? Levels.TRACE : Levels.INFO;
+        default:      return debug_ ? Levels.TRACE : Levels.INFO;
+    }
+}
+
 int entryPoint(Commands commands)
 {
     int shimExitCode = reExecWithHomebrewLibs();
@@ -558,7 +586,22 @@ int entryPoint(Commands commands)
     }
 
     defaultPoolThreads = commands.threadCount;
-    configureLoggingProvider(new shared DefaultProvider(true, commands.debug_ ? Levels.TRACE : Levels.INFO));
+
+    // Resolve the effective log level: an explicit `--log-level` wins, then
+    // `-d/--debug` (TRACE), otherwise INFO.
+    Level rootLevel = resolveLogLevel(commands.logLevel, commands.debug_);
+
+    // Surface the `--json` flag to commands (mirrors g_anisetteServer below).
+    g_jsonOutput = commands.json;
+
+    if (commands.json) {
+        // In --json mode stdout is reserved for the JSON document, so route ALL
+        // log levels (incl. INFO/DEBUG/TRACE, which the default handler sends to
+        // stdout) to stderr instead. Logs stay visible for debugging.
+        configureLoggingProvider(makeStderrProvider(rootLevel));
+    } else {
+        configureLoggingProvider(new shared DefaultProvider(true, rootLevel));
+    }
 
     // Surface the chosen anisette server to the (commands-unaware) makeSession path.
     g_anisetteServer = commands.anisetteServer.strip();
@@ -600,6 +643,12 @@ struct Commands
 {
     @(NamedArgument("d", "debug").Description("Enable debug logging"))
     bool debug_;
+
+    @(NamedArgument("json").Description("Emit machine-readable JSON to stdout (logs go to stderr)."))
+    bool json;
+
+    @(NamedArgument("log-level").Description("Log level: trace|debug|info|warn|error (overrides --debug; default info)."))
+    string logLevel = "";
 
     @(NamedArgument("thread-count").Description("Numbers of threads to be used for signing the application bundle"))
     uint threadCount = uint.max;
