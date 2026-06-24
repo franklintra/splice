@@ -1,0 +1,19 @@
+README.md
+  s_8939e2458e942e::t_9a36429173bef7 5,8,13-14,17,25,31,54,90,116,190-192,207,216,254,302,321,331,347,357,374,377,394,409,412,451-453,455,468,472-473,484-485
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "9f5f53cbf3407b8df494dafe7c72b5f2a35079dc",
+  "prompts": {},
+  "sessions": {
+    "s_8939e2458e942e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ef371d4c-fa39-41c2-a984-c25943fc6ae4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
