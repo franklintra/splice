@@ -1,0 +1,19 @@
+README.md
+  s_3cb4ba05177e06::t_e2f1097e8d9580 90-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "7968bb190ffe4f1aa0bac1b8da6fd3003af072be",
+  "prompts": {},
+  "sessions": {
+    "s_3cb4ba05177e06": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75919ed5-a459-4226-ade4-96022aa27b5b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Franklin Tranié <franklin.tranie@gmail.com>"
+    }
+  }
+}
