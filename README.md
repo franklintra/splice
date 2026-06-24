@@ -87,8 +87,29 @@ with your Apple ID.
 There is a cross-platform **CLI** (Linux, Windows, macOS) and a **GTK 4** desktop
 frontend for Linux; a Qt frontend for all three desktops is in progress.
 
-Until tagged releases land, builds are produced by GitHub Actions - grab the CLI or
-GTK artifact for your OS from the **Actions** tab, or [build it yourself](#build-it-yourself).
+### macOS (Homebrew)
+
+On Apple Silicon, install the CLI from the project's Homebrew tap:
+
+```sh
+brew install franklintra/tap/splice
+```
+
+That pulls in the `libimobiledevice` and `libplist` runtime dependencies for you.
+Always use the fully-qualified `franklintra/tap/splice` name: an unrelated `splice`
+cask (the audio app) already exists in homebrew-core, so a bare `brew install splice`
+would grab the wrong thing. The first install from a third-party tap may ask you to
+trust it, or run `brew tap franklintra/tap` first and follow the prompt.
+
+Only an Apple Silicon (arm64) build is published today. On an Intel Mac, use a
+release binary or [build it yourself](#build-it-yourself).
+
+### Other platforms
+
+Prebuilt CLI and GTK binaries are attached to each
+[release](https://github.com/franklintra/splice/releases/latest) and produced by
+GitHub Actions on every push (grab them from the **Actions** tab), or
+[build it yourself](#build-it-yourself).
 
 **Runtime dependencies:** `libimobiledevice`, `libplist-2.x` (2.2 and 2.3 both
 attempted), and OpenSSL (used for networking; planned for removal).
