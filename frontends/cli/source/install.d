@@ -10,6 +10,7 @@ import imobiledevice;
 
 import sideload;
 import sideload.application;
+import sideload.coretrust;
 
 import cli_frontend;
 import jsonout;
@@ -34,6 +35,9 @@ struct InstallCommand
     @(NamedArgument("singlethread").Description("Run the signature process on a single thread. Sacrifices speed for more consistency."))
     bool singlethreaded;
 
+    @(NamedArgument("permanent", "troll").Description("Install permanently via the CoreTrust bypass (CVE-2023-41991). Only works on a vulnerable iOS (14.0-16.6.1); the app survives the 7-day expiry and is not auto-refreshed."))
+    bool permanent = false;
+
     int opCall()
     {
         Application app = openApp(appPath);
@@ -57,6 +61,38 @@ struct InstallCommand
         if (!device)
             return 1;
 
+        // Probe the device for CoreTrust-bypass (permanent install) eligibility
+        // (#19). This is best-effort: a probe failure must not block a normal
+        // dev-cert install, but it gates `--permanent`.
+        bool bypassable = false;
+        string iosVersion = "";
+        try {
+            auto status = checkDevice(device);
+            bypassable = status.bypassable;
+            iosVersion = status.iosVersion;
+        } catch (Exception e) {
+            log.debugF!"Could not determine CoreTrust eligibility: %s"(e.msg);
+        }
+
+        if (permanent && !bypassable) {
+            // Refuse the permanent path on a non-vulnerable device.
+            log.errorF!"--permanent requires a vulnerable iOS (14.0-16.6.1), but this device reports `%s`."(
+                iosVersion.length ? iosVersion : "unknown");
+            log.error("The CoreTrust bug (CVE-2023-41991) is patched on 16.7+ / 17.x / 18.x.");
+            log.error("Run `sideloader trollstore status` for details. Re-run without --permanent for a normal install.");
+            if (g_jsonOutput)
+                printJsonError("permanent install not available on this device");
+            return 1;
+        }
+
+        if (permanent) {
+            log.warn("Installing PERMANENTLY via the CoreTrust bypass (CVE-2023-41991).");
+            log.warn("This app will survive past the usual 7-day expiry and will NOT be auto-refreshed.");
+        } else if (bypassable) {
+            // Inform: a permanent install is available but the user didn't opt in.
+            log.infoF!"This device (iOS %s) supports a PERMANENT install. Re-run with --permanent to install an app that never expires and needs no re-signing (CVE-2023-41991)."(iosVersion);
+        }
+
         // In --json mode suppress the human progress bar (it writes to stdout);
         // a structured result is printed once at the end.
         Bar progressBar = g_jsonOutput ? null : new Bar();
@@ -69,7 +105,7 @@ struct InstallCommand
                 progressBar.index = cast(int) (progress * 100);
                 progressBar.update();
             }
-        }, !singlethreaded, team.teamId);
+        }, !singlethreaded, team.teamId, permanent);
         if (progressBar !is null)
             progressBar.finish();
 
@@ -87,6 +123,7 @@ struct InstallCommand
             InstalledApp record;
             if (registry.query(app.bundleIdentifier(), record)) {
                 result["expiryDate"] = JSONValue(record.expiryDate);
+                result["permanent"] = JSONValue(record.permanent);
                 if (record.teamId.length)
                     result["teamId"] = JSONValue(record.teamId);
             }

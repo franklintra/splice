@@ -46,6 +46,7 @@ Available commands:
                  the identifier, sign and install automatically).
   sign           Sign an application bundle.
   trollsign      Bypass Core-Trust with TrollStore 2's method (CVE-2023-41991).
+  trollstore     TrollStore / CoreTrust permanent-install helpers (status).
   team           Manage teams.
   tool           Run Sideloader's tools.
   tweak          Inject tweaks (.dylib or .deb) into an IPA before signing.
@@ -378,6 +379,55 @@ device connected it prints a clear message and exits non-zero (it never crashes)
 > device — it has no way to ask the user *which* app to target — whereas JIT needs
 > a bundle id. Use the `jit` command above.
 
+## Permanent (TrollStore-style) install
+
+A normal install signs the app with a free **developer certificate**, so the app
+stops working after ~7 days unless Sideloader re-signs it (see *auto-refresh*
+above). On a *vulnerable* iOS version, Sideloader can instead do a **permanent**
+install using the CoreTrust signature-validation bug (**CVE-2023-41991**) — the
+same exploit TrollStore 2 uses. A permanently-installed app:
+
+* survives past the 7-day expiry,
+* needs **no Apple ID** and is never re-signed/refreshed,
+* is left alone by the background refresh daemon.
+
+First check whether the connected device supports it:
+
+```sh
+sideloader trollstore status
+sideloader trollstore status --udid <UDID>   # if several devices are connected
+sideloader trollstore status --wifi          # prefer Wi-Fi when both are available
+sideloader --json trollstore status          # machine-readable
+```
+
+It reports the device's iOS version and whether a permanent install is available,
+e.g. `{"iosVersion":"16.6.1","deviceName":"…","bypassable":true,"permanentInstallAvailable":true}`.
+With no device connected it prints a clear message and exits non-zero.
+
+If it is available, opt in at install time:
+
+```sh
+sideloader install --permanent App.ipa   # alias: --troll
+```
+
+`--permanent` runs the normal signing flow and then re-stamps the bundle's
+Mach-O binaries with the CoreTrust bypass, and records the app in the registry as
+non-expiring (empty expiry + a `permanent` flag) so the refresh daemon never
+tries to renew it.
+
+> **Trade-offs / limitations — read before using this:**
+> * It only works on **iOS/iPadOS 14.0 – 16.6.1**. The bug is **PATCHED on 16.7
+>   and later** (all 17.x / 18.x and the 16.7.x point releases). On a patched or
+>   too-old device, `--permanent` is **refused** with a clear error; install
+>   normally instead.
+> * It relies on a **now-patched exploit**. Updating iOS to 16.7+ removes the
+>   vulnerability; you will no longer be able to install *new* permanent apps
+>   (already-installed ones generally keep working).
+> * A permanent app is **your responsibility** — it is not managed or renewed by
+>   Sideloader. Only install software you understand and trust.
+> * The version check is a proper dotted-version comparison (`14.0` ≤ v ≤
+>   `16.6.1`); the 16.7 RC build (20H18) is treated as patched.
+
 ## Sources (AltStore-style catalogs)
 
 `sideloader source` lets you subscribe to AltStore / SideStore *sources* (JSON
@@ -421,6 +471,7 @@ the first match and warns you; pass `--source` to disambiguate.
 - Sign IPAs
 - Set-up SideStore's pairing file
 - Enable JIT for a running app (`sideloader jit <bundle-id>`)
+- Permanent (TrollStore-style) install on vulnerable iOS (`sideloader trollstore status`, `sideloader install --permanent`)
 - Manage App IDs and certificates for free developer accounts.
 - iOS version range is unknown. 32-bit support is untested. Please report any issue here!!
 

@@ -35,6 +35,7 @@ void sideloadFull(
     void delegate(double progress, string action) progressCallback,
     bool isMultithreaded = false,
     string teamId = null,
+    bool permanent = false,
 ) {
     enum STEP_COUNT = 9.0;
     auto log = getLogger();
@@ -176,6 +177,16 @@ void sideloadFull(
     double accumulator = 0;
     sign(app, certIdentity, provisioningProfiles, (progress) => progressCallback((7 + (accumulator += progress)) / STEP_COUNT, "Signing the application bundle"));
 
+    // Permanent (TrollStore-style) install: after the normal dev-cert signing,
+    // re-stamp every Mach-O in the bundle with the CoreTrust bypass (#19). This
+    // makes the binaries pass on-device validation even after the 7-day dev
+    // profile would otherwise expire. The caller (CLI `install --permanent`) has
+    // already verified the device is on a vulnerable iOS version.
+    if (permanent) {
+        progressCallback(7 / STEP_COUNT, "Applying the CoreTrust bypass (permanent install)");
+        applyCoreTrustBypass(app);
+    }
+
     // connect to the device's installation daemon and send to it the signed app
     double progress = 8 / STEP_COUNT;
     progressCallback(progress, "Installing the application on the device");
@@ -278,15 +289,19 @@ void sideloadFull(
         import persistence = app.persistence;
 
         auto registry = persistence.loadInstalledRegistry(configurationPath);
-        registry.upsert(persistence.InstalledApp(
+        auto record = persistence.InstalledApp(
             mainAppBundleId,
             team.teamId,
             certIdentity.publicKeyFingerprint(),
             Clock.currTime().toISOExtString(),
-            mainAppId.expirationDate.toISOExtString(),
+            // A permanent (CoreTrust-bypass) install never expires, so record an
+            // empty expiry; the refresh daemon also keys off `permanent` directly.
+            permanent ? "" : mainAppId.expirationDate.toISOExtString(),
             app.sourcePath,
             mainAppName,
-        ));
+        );
+        record.permanent = permanent;
+        registry.upsert(record);
         persistence.saveInstalledRegistry(configurationPath, registry);
 
         // Also remember the account + cert/profile metadata in state.json.
@@ -313,6 +328,49 @@ void sideloadFull(
     }
 
     progressCallback(1.0, "Done!");
+}
+
+/**
+ * Re-stamps every Mach-O executable in the bundle with the TrollStore 2 CoreTrust
+ * bypass (CVE-2023-41991), so the app passes on-device signature validation
+ * without a (renewable) development provisioning profile (#19).
+ *
+ * Runs AFTER the normal `sign` pass: the bypass replaces the code-signature blob
+ * produced by signing. It patches the main app executable and each sub-bundle's
+ * executable (frameworks / app extensions), mirroring what `sideloader trollsign`
+ * does for a single Mach-O. Only the device's main image needs it strictly, but
+ * patching the whole bundle keeps every embedded binary self-consistent.
+ *
+ * Caller responsibility: this must only be used on a device whose iOS version is
+ * within the vulnerable range (`sideload.coretrust.isCoreTrustBypassable`).
+ */
+private void applyCoreTrustBypass(Application app) {
+    import sideload.bundle : Bundle;
+    import sideload.ct_bypass : bypassCoreTrust;
+    import sideload.macho : MachO, makeMachO;
+
+    auto log = getLogger();
+
+    void patchBundle(Bundle bundle) {
+        if (auto execEntry = "CFBundleExecutable" in bundle.appInfo) {
+            string executableName = execEntry.str().native();
+            string executablePath = bundle.bundleDir.buildPath(executableName);
+            if (file.exists(executablePath)) {
+                MachO[] machOs = MachO.parse(cast(ubyte[]) file.read(executablePath));
+                foreach (ref machO; machOs) {
+                    machO.bypassCoreTrust();
+                }
+                file.write(executablePath, makeMachO(machOs));
+                log.debugF!"Applied CoreTrust bypass to `%s`."(executableName);
+            }
+        }
+
+        foreach (sub; bundle.subBundles()) {
+            patchBundle(sub);
+        }
+    }
+
+    patchBundle(app);
 }
 
 class NoAppIdRemainingException: Exception {

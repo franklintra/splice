@@ -93,6 +93,8 @@ struct RefreshSummary {
  *
  * An app is due when ALL of:
  *   - it is `enabled` (the daemon must respect the per-app toggle), AND
+ *   - it is NOT `permanent` (a CoreTrust-bypass / TrollStore-style install never
+ *     expires and must never be auto-re-signed; see #19), AND
  *   - its `expiryDate` is empty/unparseable (treated conservatively as due), OR
  *     parseable and at or before `now + threshold` (this also covers an already
  *     expired app, whose expiry is before `now`).
@@ -105,6 +107,9 @@ InstalledApp[] appsDueForRefresh(InstalledApp[] apps, SysTime now, Duration thre
     SysTime cutoff = now + threshold;
     foreach (app; apps) {
         if (!app.enabled)
+            continue;
+        if (app.permanent)
+            // Permanent (CoreTrust-bypass) apps never expire -> never due.
             continue;
         if (app.expiryDate.length == 0) {
             // Unknown expiry: be conservative and refresh.
@@ -356,6 +361,31 @@ unittest {
     auto now = SysTime.fromISOExtString("2026-06-24T12:00:00Z");
     auto apps = [mkApp("com.disabled.expired", "2026-01-01T00:00:00Z", false)];
     assert(appsDueForRefresh(apps, now, dur!"hours"(48)).length == 0);
+}
+
+unittest {
+    // A permanent (CoreTrust-bypass) app is NEVER due, even when its expiry is in
+    // the past or empty (#19). It does not rely on a dev profile, so the daemon
+    // must leave it alone.
+    import std.algorithm.searching : canFind;
+    import std.algorithm.iteration : map;
+    import std.array : array;
+
+    auto now = SysTime.fromISOExtString("2026-06-24T12:00:00Z");
+
+    auto permExpired = mkApp("com.permanent.expired", "2026-01-01T00:00:00Z");
+    permExpired.permanent = true;
+    auto permEmpty = mkApp("com.permanent.noexpiry", "");
+    permEmpty.permanent = true;
+    // A normal expiring app alongside, to prove only the permanent ones are skipped.
+    auto normal = mkApp("com.normal.expired", "2026-01-01T00:00:00Z");
+
+    auto due = appsDueForRefresh([permExpired, permEmpty, normal], now, dur!"hours"(48))
+        .map!((a) => a.bundleId).array();
+    assert(due.canFind("com.normal.expired"));
+    assert(!due.canFind("com.permanent.expired"));
+    assert(!due.canFind("com.permanent.noexpiry"));
+    assert(due.length == 1);
 }
 
 unittest {

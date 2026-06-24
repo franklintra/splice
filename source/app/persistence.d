@@ -251,6 +251,12 @@ struct InstalledApp {
     /// Defaults to `true`; a missing JSON field is treated as `true` for
     /// backward compatibility with registries written before this flag existed.
     bool enabled = true;
+    /// Whether this app was installed permanently via the CoreTrust bypass (#19,
+    /// TrollStore-style). A permanent app does not rely on a development
+    /// provisioning profile, so it never expires and must NOT be auto-refreshed.
+    /// Defaults to `false`; a missing JSON field reads as `false` for
+    /// backward compatibility with registries written before this flag existed.
+    bool permanent = false;
 
     JSONValue toJSON() const {
         return JSONValue([
@@ -262,6 +268,7 @@ struct InstalledApp {
             "sourceIpaPath": JSONValue(sourceIpaPath),
             "appName": JSONValue(appName),
             "enabled": JSONValue(enabled),
+            "permanent": JSONValue(permanent),
         ]);
     }
 
@@ -277,6 +284,9 @@ struct InstalledApp {
         // Back-compat: a registry written before the `enabled` flag existed has
         // no such field, which must read as "enabled" rather than "disabled".
         a.enabled = v.getBool("enabled", true);
+        // Back-compat: a registry written before `permanent` existed reads as a
+        // normal (expiring) app.
+        a.permanent = v.getBool("permanent", false);
         return a;
     }
 }
@@ -576,6 +586,21 @@ unittest {
     auto legacy = InstalledApp.fromJSON(parseJSON(`{"bundleId": "com.legacy.app"}`));
     assert(legacy.bundleId == "com.legacy.app");
     assert(legacy.enabled);
+    // Back-compat: a record without a `permanent` field reads as non-permanent.
+    assert(!legacy.permanent);
+
+    // A permanent app round-trips as permanent.
+    auto perm = InstalledApp(
+        "com.example.permanent", "TEAM1", "fp",
+        "2026-06-24T00:00:00", "",
+        "/path/to/app.ipa", "Permanent",
+    );
+    perm.permanent = true;
+    reg.upsert(perm);
+    auto reparsedPerm = InstalledRegistry.fromJSON(parseJSON(reg.toJSON().toString()));
+    InstalledApp p;
+    assert(reparsedPerm.query("com.example.permanent", p));
+    assert(p.permanent);
 
     InstalledApp missing;
     assert(!reparsed.query("com.does.not.exist", missing));
